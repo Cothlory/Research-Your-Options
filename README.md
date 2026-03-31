@@ -1,36 +1,110 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Research Starters Hub MVP
 
-## Getting Started
+Research Starters Hub ingests faculty/lab recruiting information from Qualtrics, enriches and summarizes it, then exposes reviewed opportunities to students via listing pages and newsletter exports.
 
-First, run the development server:
+Source-of-truth specification: [docs/project-spec.md](docs/project-spec.md)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Architecture Decision
+
+- Frontend + backend: Next.js App Router with TypeScript route handlers.
+- Persistence: PostgreSQL via Prisma.
+- Validation: Zod schemas.
+- AI: provider interface with deterministic mock fallback.
+- Scheduling: cron-friendly route placeholders, gated by env flags.
+
+Rationale: fastest production-friendly MVP with clear modular boundaries.
+
+## Ownership Split
+
+Advanced ownership:
+- [src/lib/services/ingestion-service.ts](src/lib/services/ingestion-service.ts)
+- [src/lib/services/review-service.ts](src/lib/services/review-service.ts)
+- [src/lib/services/publication-service.ts](src/lib/services/publication-service.ts)
+- [src/lib/qualtrics/adapter.ts](src/lib/qualtrics/adapter.ts)
+- [src/lib/scraping/fetch-and-parse.ts](src/lib/scraping/fetch-and-parse.ts)
+- [src/lib/llm/service.ts](src/lib/llm/service.ts)
+- [src/app/api](src/app/api)
+- [prisma/schema.prisma](prisma/schema.prisma)
+
+Beginner-safe ownership:
+- [src/components/beginner-safe](src/components/beginner-safe)
+- [src/content](src/content)
+- [src/app/about/page.tsx](src/app/about/page.tsx)
+- [src/app/faq/page.tsx](src/app/faq/page.tsx)
+- [docs/beginner-ui-guide.md](docs/beginner-ui-guide.md)
+- [docs/beginner-form-guide.md](docs/beginner-form-guide.md)
+
+## Folder Layout
+
+```text
+src/
+	app/
+		api/                  # CORE LOGIC routes
+		admin/                # admin dashboard UI
+		opportunities/        # public listings
+		about/ faq/           # BEGINNER SAFE static pages
+	components/
+		core/                 # shared app shell/core UI
+		beginner-safe/        # teammate-owned presentational components
+	content/                # BEGINNER SAFE static copy
+	lib/
+		config/ db/ types/
+		domain/ validation/
+		qualtrics/ scraping/ llm/
+		services/ publication/
+prisma/
+	schema.prisma
+	seed.ts
+tests/
+	unit/
+	e2e/
+docs/
+	project-spec.md
+	project-overview.md
+	architecture.md
+	data-flow.md
+	how-to-run-locally.md
+	beginner-ui-guide.md
+	beginner-form-guide.md
+	manual-testing-checklist.md
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Package Setup Commands
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+pnpm install
+cp .env.example .env
+pnpm prisma:generate
+pnpm db:push
+pnpm db:seed
+pnpm dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Environment
 
-## Learn More
+Environment template: [.env.example](.env.example)
 
-To learn more about Next.js, take a look at the following resources:
+Keep placeholders for local-first development, then replace with real values in deployment secrets.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Test Commands
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+pnpm lint
+pnpm test:unit
+pnpm test:e2e
+```
 
-## Deploy on Vercel
+## Deployment Notes (Render)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Set all env vars from [.env.example](.env.example).
+- Build command: `pnpm install && pnpm prisma:generate && pnpm build`
+- Start command: `pnpm start`
+- Optional cron route triggers:
+	- `POST /api/jobs/semester-campaign`
+	- `POST /api/jobs/reminder-email`
+	- `POST /api/jobs/staleness-audit`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Mock Mode
+
+- `MOCK_MODE=true` yields deterministic summary output.
+- `POST /api/mock/ingest` creates a full mock ingestion run.

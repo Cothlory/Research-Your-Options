@@ -1,0 +1,160 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EntryStatus {
+  pending_ingestion
+  pending_summary
+  pending_review
+  approved
+  rejected
+  stale
+  archived
+}
+
+enum SourceType {
+  qualtrics
+  manual
+}
+
+enum ProvenanceType {
+  from_survey
+  from_website
+  from_llm
+  from_manual_edit
+}
+
+enum GeneratorType {
+  mock
+  openai
+  manual
+}
+
+enum ReviewStatus {
+  draft
+  pending_review
+  approved
+  rejected
+}
+
+enum IssueStatus {
+  draft
+  exported
+  published
+}
+
+model Lab {
+  id            String         @id @default(cuid())
+  labName       String
+  facultyName   String
+  facultyEmail  String?
+  department    String
+  websiteUrl    String?
+  currentStatus EntryStatus    @default(pending_ingestion)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  submissions   LabSubmission[]
+  snapshots     LabSnapshot[]
+}
+
+model LabSubmission {
+  id               String    @id @default(cuid())
+  labId            String
+  source           SourceType @default(qualtrics)
+  rawPayload       Json
+  normalizedPayload Json
+  submittedAt      DateTime
+  ingestionStatus  EntryStatus @default(pending_ingestion)
+  validationErrors Json?
+  createdAt        DateTime   @default(now())
+
+  lab Lab @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@index([labId, submittedAt])
+}
+
+model LabSnapshot {
+  id                    String         @id @default(cuid())
+  labId                 String
+  recruitingUndergrads  Boolean
+  researchArea          String?
+  optionalNotes         String?
+  desiredSkills         String?
+  websiteUrl            String?
+  summaryText           String?
+  sourceText            String?
+  lastVerifiedAt        DateTime
+  status                EntryStatus    @default(pending_summary)
+  statusProvenance      ProvenanceType @default(from_survey)
+  summaryProvenance     ProvenanceType?
+  isLatest              Boolean        @default(true)
+  semesterLabel         String
+  createdAt             DateTime       @default(now())
+
+  lab Lab @relation(fields: [labId], references: [id], onDelete: Cascade)
+  summaryDrafts SummaryDraft[]
+
+  @@index([labId, isLatest])
+  @@index([status])
+}
+
+model SummaryDraft {
+  id            String        @id @default(cuid())
+  labSnapshotId String
+  generatorType GeneratorType
+  promptVersion String
+  inputText     String
+  outputText    String
+  reviewStatus  ReviewStatus  @default(pending_review)
+  createdAt     DateTime      @default(now())
+
+  labSnapshot LabSnapshot @relation(fields: [labSnapshotId], references: [id], onDelete: Cascade)
+
+  @@index([labSnapshotId, createdAt])
+}
+
+model PublicationIssue {
+  id                String      @id @default(cuid())
+  title             String
+  semesterLabel     String
+  issueStatus       IssueStatus @default(draft)
+  generatedHtml     String
+  generatedMarkdown String
+  generatedAt       DateTime    @default(now())
+  createdAt         DateTime    @default(now())
+}
+
+model StudentSubscriber {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  isActive       Boolean  @default(true)
+  subscribedAt   DateTime @default(now())
+  unsubscribedAt DateTime?
+}
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         String   @default("admin")
+  createdAt    DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  entityType String
+  entityId   String
+  action     String
+  actorType  String
+  actorId    String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+}
