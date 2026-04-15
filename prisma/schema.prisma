@@ -55,6 +55,11 @@ enum CampaignStatus {
   canceled
 }
 
+enum InvitationSource {
+  scheduled
+  manual
+}
+
 model Lab {
   id            String         @id @default(cuid())
   labName       String
@@ -103,6 +108,9 @@ model LabSnapshot {
   status                EntryStatus    @default(pending_summary)
   statusProvenance      ProvenanceType @default(from_survey)
   summaryProvenance     ProvenanceType?
+  needsConfirmation     Boolean        @default(false)
+  llmRejectSuggestion   Boolean        @default(false)
+  llmRejectReason       String?
   isLatest              Boolean        @default(true)
   semesterLabel         String
   createdAt             DateTime       @default(now())
@@ -198,9 +206,12 @@ model SurveyInvitation {
   id               String         @id @default(cuid())
   campaignId       String
   facultyEmail     String
+  source           InvitationSource @default(scheduled)
+  suppressExpiry   Boolean        @default(false)
   sentAt           DateTime       @default(now())
   reminderSentAt   DateTime?
   respondedAt      DateTime?
+  rejectedAt       DateTime?
   responseSnapshotId String?
 
   campaign SurveyCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
@@ -208,4 +219,18 @@ model SurveyInvitation {
   @@unique([campaignId, facultyEmail])
   @@index([facultyEmail, sentAt])
   @@index([respondedAt])
+  @@index([rejectedAt])
+}
+
+model GoogleSheetEmailMapping {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  rowIndex  Int
+  updatedAt DateTime @updatedAt
+}
+
+model GoogleSheetState {
+  id           String   @id
+  nextEmptyRow Int      @default(2)
+  updatedAt    DateTime @updatedAt
 }

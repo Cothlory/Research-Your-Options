@@ -4,6 +4,7 @@ import type { SummaryResult } from "@/lib/types/domain";
 
 export interface SummaryInput {
   labName: string;
+  facultyName?: string;
   researchArea?: string;
   surveyNotes?: string;
   websiteText?: string;

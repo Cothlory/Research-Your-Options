@@ -19,7 +19,6 @@ async function fetchLabs(): Promise<LabCardModel[]> {
 
 export default function OpportunitiesPage() {
   const [search, setSearch] = useState("");
-  const [department, setDepartment] = useState("all");
   const [recruiting, setRecruiting] = useState("all");
 
   const { data, isLoading, isError, error } = useQuery({
@@ -27,51 +26,34 @@ export default function OpportunitiesPage() {
     queryFn: fetchLabs,
   });
 
-  const departments = useMemo(() => {
-    const values = new Set((data ?? []).map((item) => item.department));
-    return ["all", ...Array.from(values).sort()];
-  }, [data]);
-
   const filtered = useMemo(() => {
     return (data ?? []).filter((item) => {
       const matchesSearch =
         !search ||
         item.labName.toLowerCase().includes(search.toLowerCase()) ||
         (item.researchArea ?? "").toLowerCase().includes(search.toLowerCase());
-      const matchesDept = department === "all" || item.department === department;
       const matchesRecruiting =
         recruiting === "all" ||
         String(item.recruitingUndergrads) === recruiting;
 
-      return matchesSearch && matchesDept && matchesRecruiting;
+      return matchesSearch && matchesRecruiting;
     });
-  }, [data, department, recruiting, search]);
+  }, [data, recruiting, search]);
 
   return (
     <section className="mx-auto max-w-6xl px-4 py-10">
       <h1 className="text-3xl font-extrabold text-slate-900">Research opportunities</h1>
       <p className="mt-2 text-sm text-slate-700">
-        Search by lab name or topic, then filter by department and recruiting status.
+        Search by lab name or topic, then filter by recruiting status.
       </p>
 
-      <div className="mt-6 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-3">
+      <div className="mt-6 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-2">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search lab name or topic"
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
-        <select
-          value={department}
-          onChange={(e) => setDepartment(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        >
-          {departments.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
         <select
           value={recruiting}
           onChange={(e) => setRecruiting(e.target.value)}

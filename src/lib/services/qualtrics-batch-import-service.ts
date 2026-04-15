@@ -5,7 +5,7 @@ import { subDays } from "date-fns";
 import { env, flags } from "@/lib/config/env";
 import { logger } from "@/lib/logger";
 import { ingestSurveySubmission } from "@/lib/services/ingestion-service";
-import { syncLatestSnapshotsToGoogleSheet } from "@/lib/publication/google-sheets";
+import { syncFacultyRowsToGoogleSheet } from "@/lib/publication/google-sheets";
 
 interface QualtricsExportInitResponse {
   result?: {
@@ -351,6 +351,7 @@ export async function importQualtricsResponsesBatch(
     let duplicates = 0;
     let filteredOut = 0;
     let failed = 0;
+    const facultyEmailsToSync = new Set<string>();
 
     for (const record of records) {
       const values = collectValues(record);
@@ -379,11 +380,24 @@ export async function importQualtricsResponsesBatch(
           syncGoogleSheet: false,
         });
 
+        const facultyEmail =
+          "facultyEmail" in result && typeof result.facultyEmail === "string"
+            ? result.facultyEmail.trim().toLowerCase()
+            : undefined;
+
         const duplicate = "duplicate" in result && result.duplicate === true;
         if (duplicate) {
           duplicates += 1;
+          if (facultyEmail) {
+            facultyEmailsToSync.add(facultyEmail);
+          }
         } else if (result.ok) {
           imported += 1;
+          if (!("needsConfirmation" in result && result.needsConfirmation === true)) {
+            if (facultyEmail) {
+              facultyEmailsToSync.add(facultyEmail);
+            }
+          }
         } else {
           failed += 1;
         }
@@ -397,7 +411,10 @@ export async function importQualtricsResponsesBatch(
       }
     }
 
-    const googleSheetSync = imported > 0 ? await syncLatestSnapshotsToGoogleSheet() : undefined;
+    const googleSheetSync =
+      facultyEmailsToSync.size > 0
+        ? await syncFacultyRowsToGoogleSheet([...facultyEmailsToSync])
+        : undefined;
 
     return {
       ok: failed === 0,

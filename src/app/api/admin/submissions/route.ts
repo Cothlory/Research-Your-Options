@@ -10,8 +10,10 @@ export async function GET(req: NextRequest) {
     return unauthorized;
   }
 
-  // TODO(owner=me): replace with real admin auth check.
-  const snapshots = await prisma.labSnapshot.findMany({
+  const needConfirmation = await prisma.labSnapshot.findMany({
+    where: {
+      OR: [{ status: "pending_review" }, { needsConfirmation: true }],
+    },
     include: {
       lab: true,
       summaryDrafts: {
@@ -23,5 +25,29 @@ export async function GET(req: NextRequest) {
     take: 100,
   });
 
-  return NextResponse.json(snapshots);
+  const approvedSnapshots = await prisma.labSnapshot.findMany({
+    where: {
+      status: "approved",
+    },
+    include: {
+      lab: true,
+      summaryDrafts: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 300,
+  });
+
+  const seenLabIds = new Set<string>();
+  const allLabs = approvedSnapshots.filter((snapshot) => {
+    if (seenLabIds.has(snapshot.labId)) {
+      return false;
+    }
+    seenLabIds.add(snapshot.labId);
+    return true;
+  });
+
+  return NextResponse.json({ needConfirmation, allLabs });
 }

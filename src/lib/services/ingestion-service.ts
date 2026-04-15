@@ -7,9 +7,10 @@ import { validateNormalizedPayload } from "@/lib/validation/qualtrics";
 import { buildLabMatchKey } from "@/lib/domain/lab-matching";
 import { fetchAndParseWebsiteText } from "@/lib/scraping/fetch-and-parse";
 import { getSummarizerProvider } from "@/lib/llm/service";
+import { evaluateFieldUpdatesWithLlm } from "@/lib/llm/update-evaluator";
 import { semesterLabelFromDate } from "@/lib/domain/snapshot";
 import { recordSurveyResponseForFacultyEmail } from "@/lib/services/campaign-service";
-import { syncLatestSnapshotsToGoogleSheet } from "@/lib/publication/google-sheets";
+import { syncFacultyRowsToGoogleSheet } from "@/lib/publication/google-sheets";
 
 interface IngestInput {
   payload: unknown;
@@ -18,6 +19,149 @@ interface IngestInput {
   submittedAt?: Date;
   waveId?: string;
   syncGoogleSheet?: boolean;
+}
+
+function normalizeEmail(email?: string): string | undefined {
+  const normalized = email?.trim().toLowerCase();
+  return normalized ? normalized : undefined;
+}
+
+function normalizeDiffValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function trimWords(text: string, maxWords: number): string {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) {
+    return words.join(" ");
+  }
+
+  return `${words.slice(0, maxWords).join(" ")}.`;
+}
+
+function formatSurveyQualifications(value?: string | null): string | null {
+  if (!value?.trim()) {
+    return null;
+  }
+
+  const normalized = value
+    .replace(/\r\n/g, "\n")
+    .replace(/[•●▪]/g, "\n")
+    .trim();
+
+  const rawLines = normalized
+    .split(/\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const lines =
+    rawLines.length === 1 && rawLines[0].includes(";")
+      ? rawLines[0].split(";").map((segment) => segment.trim()).filter(Boolean)
+      : rawLines;
+
+  const bullets = lines
+    .map((line) => line.replace(/^[-*\s]+/, "").replace(/^\d+[.)]\s*/, "").trim())
+    .filter((line) => {
+      const normalized = line.toLowerCase();
+      return !(
+        normalized === "0" ||
+        normalized === "1" ||
+        normalized === "yes" ||
+        normalized === "no" ||
+        normalized === "true" ||
+        normalized === "false" ||
+        normalized === "n/a" ||
+        normalized === "na" ||
+        normalized === "none" ||
+        normalized === "null"
+      );
+    })
+    .filter(Boolean)
+    .map((line) => `- ${line}`);
+
+  if (bullets.length === 0) {
+    return null;
+  }
+
+  return bullets.join("\n");
+}
+
+function chooseUpdatedString(
+  field: string,
+  updateFields: Set<string>,
+  proposedValue: string | null | undefined,
+  baselineValue: string | null | undefined,
+): string | null {
+  if (updateFields.has(field)) {
+    return proposedValue ?? null;
+  }
+
+  return baselineValue ?? null;
+}
+
+function chooseUpdatedBoolean(
+  field: string,
+  updateFields: Set<string>,
+  proposedValue: boolean,
+  baselineValue: boolean,
+): boolean {
+  if (updateFields.has(field)) {
+    return proposedValue;
+  }
+
+  return baselineValue;
+}
+
+function buildLabIdentityUpdates(
+  lab: {
+    labName: string;
+    facultyName: string;
+    facultyEmail: string | null;
+    department: string;
+    websiteUrl: string | null;
+  },
+  payload: {
+    labName: string;
+    facultyName: string;
+    department: string;
+    websiteUrl?: string;
+  },
+  facultyEmail?: string,
+): Prisma.LabUpdateInput {
+  const updates: Prisma.LabUpdateInput = {};
+
+  if (payload.labName && payload.labName !== lab.labName) {
+    updates.labName = payload.labName;
+  }
+
+  if (payload.facultyName && payload.facultyName !== lab.facultyName) {
+    updates.facultyName = payload.facultyName;
+  }
+
+  if (payload.department && payload.department !== lab.department) {
+    updates.department = payload.department;
+  }
+
+  if (payload.websiteUrl && payload.websiteUrl !== lab.websiteUrl) {
+    updates.websiteUrl = payload.websiteUrl;
+  }
+
+  if (facultyEmail && facultyEmail !== (lab.facultyEmail ?? "").toLowerCase()) {
+    updates.facultyEmail = facultyEmail;
+  }
+
+  return updates;
 }
 
 export async function ingestSurveySubmission({
@@ -33,7 +177,16 @@ export async function ingestSurveySubmission({
   if (source === "qualtrics" && qualtricsResponseId) {
     const existingSubmission = await prisma.labSubmission.findUnique({
       where: { qualtricsResponseId },
-      select: { id: true, labId: true, ingestionStatus: true },
+      select: {
+        id: true,
+        labId: true,
+        ingestionStatus: true,
+        lab: {
+          select: {
+            facultyEmail: true,
+          },
+        },
+      },
     });
 
     if (existingSubmission) {
@@ -47,13 +200,22 @@ export async function ingestSurveySubmission({
           duplicate: true,
           labId: existingSubmission.labId,
           submissionId: existingSubmission.id,
+          facultyEmail: normalizeEmail(existingSubmission.lab.facultyEmail ?? undefined),
         };
       }
     }
 
     const afterDeleteSubmission = await prisma.labSubmission.findUnique({
       where: { qualtricsResponseId },
-      select: { id: true, labId: true },
+      select: {
+        id: true,
+        labId: true,
+        lab: {
+          select: {
+            facultyEmail: true,
+          },
+        },
+      },
     });
 
     if (afterDeleteSubmission) {
@@ -62,6 +224,7 @@ export async function ingestSurveySubmission({
         duplicate: true,
         labId: afterDeleteSubmission.labId,
         submissionId: afterDeleteSubmission.id,
+        facultyEmail: normalizeEmail(afterDeleteSubmission.lab.facultyEmail ?? undefined),
       };
     }
   }
@@ -69,28 +232,62 @@ export async function ingestSurveySubmission({
   const normalizedPayload = mapQualtricsToNormalized(payload as Record<string, unknown>);
   const validation = validateNormalizedPayload(normalizedPayload);
   const matchKey = buildLabMatchKey(normalizedPayload);
+  const facultyEmail = normalizeEmail(normalizedPayload.facultyEmail);
 
-  const existingLab = await prisma.lab.findFirst({
+  const existingLabByEmail = facultyEmail
+    ? await prisma.lab.findFirst({
+        where: {
+          facultyEmail: {
+            equals: facultyEmail,
+            mode: "insensitive",
+          },
+        },
+      })
+    : null;
+
+  const existingLabByName = await prisma.lab.findFirst({
     where: {
       labName: normalizedPayload.labName,
       department: normalizedPayload.department,
     },
   });
 
-  const lab =
+  const existingLab = existingLabByEmail ?? existingLabByName;
+
+  let lab =
     existingLab ??
     (await prisma.lab.create({
       data: {
         labName: normalizedPayload.labName || `Unknown lab (${matchKey})`,
         facultyName: normalizedPayload.facultyName || "Unknown Faculty",
-        facultyEmail: normalizedPayload.facultyEmail,
+        facultyEmail,
         department: normalizedPayload.department || "Unknown Department",
         websiteUrl: normalizedPayload.websiteUrl,
         currentStatus: validation.valid ? EntryStatus.pending_summary : EntryStatus.pending_ingestion,
       },
     }));
 
-  await prisma.labSubmission.create({
+  const identityUpdates = buildLabIdentityUpdates(
+    lab,
+    {
+      labName: normalizedPayload.labName,
+      facultyName: normalizedPayload.facultyName,
+      department: normalizedPayload.department,
+      websiteUrl: normalizedPayload.websiteUrl,
+    },
+    facultyEmail,
+  );
+
+  if (Object.keys(identityUpdates).length > 0) {
+    lab = await prisma.lab.update({
+      where: { id: lab.id },
+      data: identityUpdates,
+    });
+  }
+
+  const resolvedFacultyEmail = facultyEmail ?? normalizeEmail(lab.facultyEmail ?? undefined);
+
+  const submission = await prisma.labSubmission.create({
     data: {
       labId: lab.id,
       source,
@@ -109,80 +306,404 @@ export async function ingestSurveySubmission({
       ok: false,
       errors: validation.errors,
       labId: lab.id,
+      facultyEmail: resolvedFacultyEmail,
     };
   }
 
-  await prisma.labSnapshot.updateMany({
-    where: { labId: lab.id, isLatest: true },
-    data: { isLatest: false },
+  const latestApprovedSnapshot = await prisma.labSnapshot.findFirst({
+    where: {
+      labId: lab.id,
+      status: EntryStatus.approved,
+    },
+    orderBy: { lastVerifiedAt: "desc" },
   });
 
   const scrapeResult = await fetchAndParseWebsiteText(normalizedPayload.websiteUrl);
   const summarizer = getSummarizerProvider();
   const summary = await summarizer.summarize({
     labName: normalizedPayload.labName,
+    facultyName: normalizedPayload.facultyName,
     researchArea: normalizedPayload.researchArea,
     surveyNotes: normalizedPayload.optionalNotes,
     websiteText: scrapeResult.sourceText,
   });
 
-  const snapshot = await prisma.labSnapshot.create({
+  const summaryText = trimWords(summary.structured?.summary ?? summary.outputText, 70);
+  const surveyQualifications = formatSurveyQualifications(normalizedPayload.desiredSkills);
+  const surveyFallbackQualifications = formatSurveyQualifications(normalizedPayload.optionalNotes);
+  const proposedQualifications =
+    surveyQualifications ?? surveyFallbackQualifications ?? "- Not specified";
+
+  const baseline = {
+    labName: latestApprovedSnapshot ? lab.labName : undefined,
+    facultyName: latestApprovedSnapshot ? lab.facultyName : undefined,
+    department: latestApprovedSnapshot ? lab.department : undefined,
+    websiteUrl: latestApprovedSnapshot?.websiteUrl ?? lab.websiteUrl,
+    researchArea: latestApprovedSnapshot?.researchArea,
+    recruitingUndergrads: latestApprovedSnapshot?.recruitingUndergrads ?? false,
+    optionalNotes: latestApprovedSnapshot?.optionalNotes,
+    desiredSkills: latestApprovedSnapshot?.desiredSkills,
+    summaryText: latestApprovedSnapshot?.summaryText,
+    sourceText: latestApprovedSnapshot?.sourceText,
+  };
+
+  const candidate = {
+    labName: normalizedPayload.labName || lab.labName,
+    facultyName: normalizedPayload.facultyName || lab.facultyName,
+    department: normalizedPayload.department || lab.department,
+    websiteUrl: normalizedPayload.websiteUrl ?? lab.websiteUrl,
+    researchArea: normalizedPayload.researchArea,
+    recruitingUndergrads: normalizedPayload.recruitingUndergrads,
+    optionalNotes: normalizedPayload.optionalNotes,
+    desiredSkills: proposedQualifications,
+    summaryText,
+    sourceText: scrapeResult.sourceText,
+  };
+
+  const changedFields = [
+    { field: "labName", previousValue: baseline.labName ?? "", nextValue: candidate.labName ?? "" },
+    {
+      field: "facultyName",
+      previousValue: baseline.facultyName ?? "",
+      nextValue: candidate.facultyName ?? "",
+    },
+    {
+      field: "department",
+      previousValue: baseline.department ?? "",
+      nextValue: candidate.department ?? "",
+    },
+    {
+      field: "websiteUrl",
+      previousValue: baseline.websiteUrl ?? "",
+      nextValue: candidate.websiteUrl ?? "",
+    },
+    {
+      field: "researchArea",
+      previousValue: baseline.researchArea ?? "",
+      nextValue: candidate.researchArea ?? "",
+    },
+    {
+      field: "recruitingUndergrads",
+      previousValue: String(baseline.recruitingUndergrads),
+      nextValue: String(candidate.recruitingUndergrads),
+    },
+    {
+      field: "optionalNotes",
+      previousValue: baseline.optionalNotes ?? "",
+      nextValue: candidate.optionalNotes ?? "",
+    },
+    {
+      field: "desiredSkills",
+      previousValue: baseline.desiredSkills ?? "",
+      nextValue: candidate.desiredSkills ?? "",
+    },
+    {
+      field: "summaryText",
+      previousValue: baseline.summaryText ?? "",
+      nextValue: candidate.summaryText ?? "",
+    },
+    {
+      field: "sourceText",
+      previousValue: baseline.sourceText ?? "",
+      nextValue: candidate.sourceText ?? "",
+    },
+  ].filter((entry) => normalizeDiffValue(entry.previousValue) !== normalizeDiffValue(entry.nextValue));
+
+  if (changedFields.length === 0 && latestApprovedSnapshot) {
+    await prisma.labSnapshot.update({
+      where: { id: latestApprovedSnapshot.id },
+      data: {
+        lastVerifiedAt: effectiveSubmittedAt,
+      },
+    });
+
+    await prisma.labSubmission.update({
+      where: { id: submission.id },
+      data: {
+        ingestionStatus: EntryStatus.approved,
+      },
+    });
+
+    const campaignMatch =
+      source === "qualtrics" && resolvedFacultyEmail
+        ? await recordSurveyResponseForFacultyEmail(resolvedFacultyEmail, latestApprovedSnapshot.id, {
+            waveId,
+            respondedAt: effectiveSubmittedAt,
+          })
+        : { matched: false };
+
+    const googleSheetSync =
+      source === "qualtrics" && (syncGoogleSheet ?? true) && resolvedFacultyEmail
+        ? await syncFacultyRowsToGoogleSheet([resolvedFacultyEmail])
+        : undefined;
+
+    return {
+      ok: true,
+      labId: lab.id,
+      snapshotId: latestApprovedSnapshot.id,
+      noFieldUpdates: true,
+      facultyEmail: resolvedFacultyEmail,
+      campaignMatched: campaignMatch.matched,
+      googleSheetSync,
+      scrapeWarning: scrapeResult.ok ? undefined : scrapeResult.error,
+    };
+  }
+
+  const fieldDecision = await evaluateFieldUpdatesWithLlm({
+    labName: candidate.labName,
+    websiteText: scrapeResult.sourceText,
+    changedFields,
+  });
+
+  const suggestReject =
+    Boolean(summary.structured?.suggestReject) || fieldDecision.suggestReject;
+  const rejectReason = summary.structured?.rejectReason ?? fieldDecision.rejectReason;
+
+  if (suggestReject) {
+    const pendingSnapshot = await prisma.labSnapshot.create({
+      data: {
+        labId: lab.id,
+        recruitingUndergrads: candidate.recruitingUndergrads,
+        researchArea: candidate.researchArea,
+        optionalNotes: candidate.optionalNotes,
+        desiredSkills: candidate.desiredSkills,
+        websiteUrl: candidate.websiteUrl,
+        sourceText: candidate.sourceText,
+        summaryText: candidate.summaryText,
+        lastVerifiedAt: effectiveSubmittedAt,
+        status: EntryStatus.pending_review,
+        statusProvenance: "from_survey",
+        summaryProvenance: "from_llm",
+        semesterLabel: semesterLabelFromDate(),
+        isLatest: latestApprovedSnapshot ? false : true,
+        needsConfirmation: true,
+        llmRejectSuggestion: true,
+        llmRejectReason: rejectReason,
+      },
+    });
+
+    await prisma.summaryDraft.create({
+      data: {
+        labSnapshotId: pendingSnapshot.id,
+        generatorType: summary.provider,
+        promptVersion: summary.promptVersion,
+        inputText: `${normalizedPayload.researchArea ?? ""}\n${scrapeResult.sourceText}`,
+        outputText: candidate.summaryText,
+        reviewStatus: "pending_review",
+      },
+    });
+
+    await prisma.lab.update({
+      where: { id: lab.id },
+      data: {
+        currentStatus: EntryStatus.pending_review,
+        facultyEmail: resolvedFacultyEmail,
+      },
+    });
+
+    await prisma.labSubmission.update({
+      where: { id: submission.id },
+      data: {
+        ingestionStatus: EntryStatus.pending_review,
+      },
+    });
+
+    const campaignMatch =
+      source === "qualtrics" && resolvedFacultyEmail
+        ? await recordSurveyResponseForFacultyEmail(resolvedFacultyEmail, pendingSnapshot.id, {
+            waveId,
+            respondedAt: effectiveSubmittedAt,
+          })
+        : { matched: false };
+
+    return {
+      ok: true,
+      labId: lab.id,
+      snapshotId: pendingSnapshot.id,
+      needsConfirmation: true,
+      rejectReason,
+      facultyEmail: resolvedFacultyEmail,
+      campaignMatched: campaignMatch.matched,
+      scrapeWarning: scrapeResult.ok ? undefined : scrapeResult.error,
+    };
+  }
+
+  const updateFields = new Set(fieldDecision.fieldsToUpdate);
+
+  if (latestApprovedSnapshot && updateFields.size === 0) {
+    await prisma.labSnapshot.update({
+      where: { id: latestApprovedSnapshot.id },
+      data: {
+        lastVerifiedAt: effectiveSubmittedAt,
+      },
+    });
+
+    await prisma.labSubmission.update({
+      where: { id: submission.id },
+      data: {
+        ingestionStatus: EntryStatus.approved,
+      },
+    });
+
+    const campaignMatch =
+      source === "qualtrics" && resolvedFacultyEmail
+        ? await recordSurveyResponseForFacultyEmail(resolvedFacultyEmail, latestApprovedSnapshot.id, {
+            waveId,
+            respondedAt: effectiveSubmittedAt,
+          })
+        : { matched: false };
+
+    const googleSheetSync =
+      source === "qualtrics" && (syncGoogleSheet ?? true) && resolvedFacultyEmail
+        ? await syncFacultyRowsToGoogleSheet([resolvedFacultyEmail])
+        : undefined;
+
+    return {
+      ok: true,
+      labId: lab.id,
+      snapshotId: latestApprovedSnapshot.id,
+      noFieldUpdates: true,
+      facultyEmail: resolvedFacultyEmail,
+      campaignMatched: campaignMatch.matched,
+      googleSheetSync,
+      scrapeWarning: scrapeResult.ok ? undefined : scrapeResult.error,
+    };
+  }
+
+  const resolved = latestApprovedSnapshot
+    ? {
+        recruitingUndergrads: chooseUpdatedBoolean(
+          "recruitingUndergrads",
+          updateFields,
+          candidate.recruitingUndergrads,
+          latestApprovedSnapshot.recruitingUndergrads,
+        ),
+        researchArea: chooseUpdatedString(
+          "researchArea",
+          updateFields,
+          candidate.researchArea,
+          latestApprovedSnapshot.researchArea,
+        ),
+        optionalNotes: chooseUpdatedString(
+          "optionalNotes",
+          updateFields,
+          candidate.optionalNotes,
+          latestApprovedSnapshot.optionalNotes,
+        ),
+        desiredSkills: chooseUpdatedString(
+          "desiredSkills",
+          updateFields,
+          candidate.desiredSkills,
+          latestApprovedSnapshot.desiredSkills,
+        ),
+        websiteUrl: chooseUpdatedString(
+          "websiteUrl",
+          updateFields,
+          candidate.websiteUrl,
+          latestApprovedSnapshot.websiteUrl,
+        ),
+        sourceText: chooseUpdatedString(
+          "sourceText",
+          updateFields,
+          candidate.sourceText,
+          latestApprovedSnapshot.sourceText,
+        ),
+        summaryText: chooseUpdatedString(
+          "summaryText",
+          updateFields,
+          candidate.summaryText,
+          latestApprovedSnapshot.summaryText,
+        ),
+      }
+    : {
+        recruitingUndergrads: candidate.recruitingUndergrads,
+        researchArea: candidate.researchArea ?? null,
+        optionalNotes: candidate.optionalNotes ?? null,
+        desiredSkills: candidate.desiredSkills ?? null,
+        websiteUrl: candidate.websiteUrl ?? null,
+        sourceText: candidate.sourceText ?? null,
+        summaryText: candidate.summaryText ?? null,
+      };
+
+  await prisma.labSnapshot.updateMany({
+    where: { labId: lab.id, isLatest: true },
+    data: { isLatest: false },
+  });
+
+  const approvedSnapshot = await prisma.labSnapshot.create({
     data: {
       labId: lab.id,
-      recruitingUndergrads: normalizedPayload.recruitingUndergrads,
-      researchArea: normalizedPayload.researchArea,
-      optionalNotes: normalizedPayload.optionalNotes,
-      desiredSkills: normalizedPayload.desiredSkills,
-      websiteUrl: normalizedPayload.websiteUrl,
-      sourceText: scrapeResult.sourceText,
-      summaryText: summary.outputText,
+      recruitingUndergrads: resolved.recruitingUndergrads,
+      researchArea: resolved.researchArea,
+      optionalNotes: resolved.optionalNotes,
+      desiredSkills: resolved.desiredSkills,
+      websiteUrl: resolved.websiteUrl,
+      sourceText: resolved.sourceText,
+      summaryText: resolved.summaryText,
       lastVerifiedAt: effectiveSubmittedAt,
-      status: EntryStatus.pending_review,
+      status: EntryStatus.approved,
       statusProvenance: "from_survey",
-      summaryProvenance: summary.provider === "mock" ? "from_llm" : "from_llm",
+      summaryProvenance: "from_llm",
       semesterLabel: semesterLabelFromDate(),
       isLatest: true,
+      needsConfirmation: false,
+      llmRejectSuggestion: false,
+      llmRejectReason: null,
     },
   });
 
   await prisma.summaryDraft.create({
     data: {
-      labSnapshotId: snapshot.id,
+      labSnapshotId: approvedSnapshot.id,
       generatorType: summary.provider,
       promptVersion: summary.promptVersion,
       inputText: `${normalizedPayload.researchArea ?? ""}\n${scrapeResult.sourceText}`,
-      outputText: summary.outputText,
-      reviewStatus: "pending_review",
+      outputText: resolved.summaryText ?? candidate.summaryText,
+      reviewStatus: "approved",
     },
   });
 
   await prisma.lab.update({
     where: { id: lab.id },
     data: {
-      currentStatus: EntryStatus.pending_review,
-      facultyName: normalizedPayload.facultyName,
-      facultyEmail: normalizedPayload.facultyEmail,
-      websiteUrl: normalizedPayload.websiteUrl,
+      currentStatus: EntryStatus.approved,
+      labName: chooseUpdatedString("labName", updateFields, candidate.labName, lab.labName) ?? lab.labName,
+      facultyName:
+        chooseUpdatedString("facultyName", updateFields, candidate.facultyName, lab.facultyName) ??
+        lab.facultyName,
+      facultyEmail: resolvedFacultyEmail,
+      department:
+        chooseUpdatedString("department", updateFields, candidate.department, lab.department) ??
+        lab.department,
+      websiteUrl: resolved.websiteUrl,
+    },
+  });
+
+  await prisma.labSubmission.update({
+    where: { id: submission.id },
+    data: {
+      ingestionStatus: EntryStatus.approved,
     },
   });
 
   const campaignMatch =
-    source === "qualtrics" && normalizedPayload.facultyEmail
-      ? await recordSurveyResponseForFacultyEmail(normalizedPayload.facultyEmail, snapshot.id, {
+    source === "qualtrics" && resolvedFacultyEmail
+      ? await recordSurveyResponseForFacultyEmail(resolvedFacultyEmail, approvedSnapshot.id, {
           waveId,
           respondedAt: effectiveSubmittedAt,
         })
       : { matched: false };
 
   const googleSheetSync =
-    source === "qualtrics" && (syncGoogleSheet ?? true)
-      ? await syncLatestSnapshotsToGoogleSheet()
+    source === "qualtrics" && (syncGoogleSheet ?? true) && resolvedFacultyEmail
+      ? await syncFacultyRowsToGoogleSheet([resolvedFacultyEmail])
       : undefined;
 
   return {
     ok: true,
     labId: lab.id,
-    snapshotId: snapshot.id,
+    snapshotId: approvedSnapshot.id,
+    facultyEmail: resolvedFacultyEmail,
     campaignMatched: campaignMatch.matched,
     googleSheetSync,
     scrapeWarning: scrapeResult.ok ? undefined : scrapeResult.error,

@@ -7,9 +7,10 @@ import { env } from "@/lib/config/env";
 import { logger } from "@/lib/logger";
 
 const StructuredSummarySchema = z.object({
-  summary: z.string().min(40).max(480),
-  qualifications: z.string().min(10).max(220),
-  studentFit: z.string().min(10).max(220),
+  summary: z.string().min(20).max(900),
+  qualifications: z.array(z.string().min(2).max(160)).min(1).max(3),
+  suggestReject: z.boolean(),
+  rejectReason: z.string().max(220).nullable().optional(),
 });
 
 interface ChatCompletionResponse {
@@ -18,6 +19,57 @@ interface ChatCompletionResponse {
       content?: string | null;
     };
   }>;
+}
+
+function trimToWords(text: string, maxWords: number): string {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) {
+    return words.join(" ");
+  }
+
+  return `${words.slice(0, maxWords).join(" ")}.`;
+}
+
+function toBulletLines(items: string[]): string {
+  return items.slice(0, 3).map((item) => `- ${item.trim()}`).join("\n");
+}
+
+function normalizePhrase(text?: string | null): string {
+  if (!text) {
+    return "";
+  }
+
+  return text
+    .replace(/\s+/g, " ")
+    .replace(/^[\s,;:.]+|[\s,;:.]+$/g, "")
+    .trim();
+}
+
+function extractTemplatePart(summary: string, marker: string): string | undefined {
+  const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(`${escaped}\\s+([^.]*)\\.?`, "i");
+  const match = summary.match(regex);
+  const value = normalizePhrase(match?.[1]);
+  return value || undefined;
+}
+
+function buildTemplateSummary(
+  input: SummaryInput,
+  focusField?: string,
+  topics?: string,
+): string {
+  const labName = normalizePhrase(input.labName) || "This lab";
+  const professor = normalizePhrase(input.facultyName) || "the professor";
+  const focus = normalizePhrase(focusField) || normalizePhrase(input.researchArea) || "ongoing research";
+  const currentTopics =
+    normalizePhrase(topics) ||
+    normalizePhrase(input.researchArea) ||
+    "projects listed on the lab website";
+
+  return trimToWords(
+    `${labName}, led by ${professor}, focuses on ${focus}. Current topics include ${currentTopics}.`,
+    70,
+  );
 }
 
 export class OpenAISummarizerProvider implements SummarizerProvider {
@@ -30,22 +82,34 @@ export class OpenAISummarizerProvider implements SummarizerProvider {
   private buildPrompt(input: SummaryInput): string {
     return [
       `Lab name: ${input.labName}`,
+      `Professor name: ${input.facultyName ?? "not provided"}`,
       `Research area: ${input.researchArea ?? "not provided"}`,
       `Survey notes: ${input.surveyNotes ?? "not provided"}`,
       "Website text:",
       input.websiteText?.slice(0, 4000) ?? "not provided",
       "",
-      "Write concise, student-friendly copy in plain language.",
-      "Avoid hype and unsupported claims.",
-      "If data is missing, infer cautiously and mention uncertainty in neutral wording.",
+      "Return only evidence-backed details from the website text.",
+      "summary must be <= 70 words and follow this exact two-sentence pattern:",
+      "<Lab name>, led by <Professor name>, focuses on <focus field>. Current topics include <topic 1>, <topic 2>, ...",
+      "Do not include staffing details like students, interns, visitors, team size, or onboarding process.",
+      "qualifications must be 1-3 concise bullet candidates.",
+      "Set suggestReject=true when this looks not like a real research lab listing.",
+      "rejectReason should be short and specific if suggestReject=true, otherwise set rejectReason to null.",
     ].join("\n");
   }
 
   private fallbackSummary(input: SummaryInput): SummaryResult {
+    const summary = buildTemplateSummary(input);
+
     return {
       provider: "openai",
       promptVersion: `${env.OPENAI_SUMMARY_SCHEMA_VERSION}-fallback`,
-      outputText: `${input.labName} focuses on ${input.researchArea ?? "ongoing research"}. Students with ${input.surveyNotes ? "relevant background and interest" : "curiosity and willingness to learn"} are encouraged to explore the lab website and reach out.`,
+      outputText: summary,
+      structured: {
+        summary,
+        qualifications: "- Basic interest in the topic\n- Willingness to learn\n- Consistent communication",
+        suggestReject: false,
+      },
     };
   }
 
@@ -84,19 +148,27 @@ export class OpenAISummarizerProvider implements SummarizerProvider {
                 properties: {
                   summary: {
                     type: "string",
-                    description:
-                      "2-4 sentences describing what the lab works on and what students might do.",
+                    description: "Student-facing summary, no more than 100 words.",
                   },
                   qualifications: {
-                    type: "string",
-                    description: "Minimum or preferred skills/experience for new undergrads.",
+                    type: "array",
+                    minItems: 1,
+                    maxItems: 3,
+                    items: {
+                      type: "string",
+                    },
+                    description: "Up to 3 concise minimum qualifications.",
                   },
-                  studentFit: {
-                    type: "string",
-                    description: "Who is likely to be a good fit and first practical next step.",
+                  suggestReject: {
+                    type: "boolean",
+                    description: "True only when the content likely does not represent a research lab listing.",
+                  },
+                  rejectReason: {
+                    anyOf: [{ type: "string" }, { type: "null" }],
+                    description: "Short reason for suggestReject=true.",
                   },
                 },
-                required: ["summary", "qualifications", "studentFit"],
+                required: ["summary", "qualifications", "suggestReject", "rejectReason"],
               },
             },
           },
@@ -117,16 +189,21 @@ export class OpenAISummarizerProvider implements SummarizerProvider {
       }
 
       const structured = StructuredSummarySchema.parse(JSON.parse(content));
+      const focusFromSummary = extractTemplatePart(structured.summary, "focuses on");
+      const topicsFromSummary = extractTemplatePart(structured.summary, "current topics include");
+      const summary = buildTemplateSummary(input, focusFromSummary, topicsFromSummary);
+      const qualifications = toBulletLines(structured.qualifications);
 
       return {
         provider: "openai",
         promptVersion: env.OPENAI_SUMMARY_SCHEMA_VERSION,
-        outputText: [
-          structured.summary,
-          `Minimum qualifications: ${structured.qualifications}`,
-          `Student fit: ${structured.studentFit}`,
-        ].join("\n"),
-        structured,
+        outputText: summary,
+        structured: {
+          summary,
+          qualifications,
+          suggestReject: structured.suggestReject,
+          rejectReason: structured.rejectReason ?? undefined,
+        },
       };
     } catch (error) {
       logger.warn("OpenAI summarization failed; using fallback summary", {

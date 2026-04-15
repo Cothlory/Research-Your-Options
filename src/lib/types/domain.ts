@@ -40,7 +40,8 @@ export interface SummaryResult {
   structured?: {
     summary: string;
     qualifications: string;
-    studentFit: string;
+    suggestReject?: boolean;
+    rejectReason?: string;
   };
 }
 

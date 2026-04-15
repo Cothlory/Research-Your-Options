@@ -8,7 +8,6 @@ import { StatusBadge } from "@/components/beginner-safe/StatusBadge";
 export interface LabCardModel {
   id: string;
   labName: string;
-  department: string;
   recruitingUndergrads: boolean;
   researchArea?: string | null;
   summaryText?: string | null;
@@ -28,7 +27,6 @@ export function LabCard({ lab }: { lab: LabCardModel }) {
           tone={lab.recruitingUndergrads ? "success" : "warning"}
         />
       </div>
-      <p className="text-sm font-medium text-slate-700">{lab.department}</p>
       <p className="mt-2 text-sm text-slate-700">{lab.summaryText || "Summary pending review."}</p>
       {lab.researchArea ? (
         <p className="mt-2 text-sm text-slate-600">

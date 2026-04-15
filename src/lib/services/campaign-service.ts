@@ -145,8 +145,85 @@ export async function replaceProfessorContacts(emails: string[]) {
 
 export async function listProfessorContacts() {
   return prisma.professorContact.findMany({
+    where: { isActive: true },
     orderBy: { email: "asc" },
   });
+}
+
+export async function listProfessorContactsWithStatus(
+  now: Date = new Date(),
+): Promise<ProfessorContactStatusItem[]> {
+  const contacts = await prisma.professorContact.findMany({
+    where: { isActive: true },
+    orderBy: { email: "asc" },
+  });
+
+  const lastCampaign = await prisma.surveyCampaign.findFirst({
+    where: {
+      status: {
+        in: [CampaignStatus.launched, CampaignStatus.closed],
+      },
+      label: {
+        not: {
+          startsWith: "manual-",
+        },
+      },
+    },
+    orderBy: [{ launchedAt: "desc" }, { scheduledFor: "desc" }],
+  });
+
+  const items: ProfessorContactStatusItem[] = [];
+
+  for (const contact of contacts) {
+    const normalizedEmail = normalizeEmail(contact.email);
+
+    const invitation = lastCampaign
+      ? await prisma.surveyInvitation.findFirst({
+          where: {
+            campaignId: lastCampaign.id,
+            facultyEmail: normalizedEmail,
+          },
+          orderBy: { sentAt: "desc" },
+        })
+      : null;
+
+    let statusSinceLastSurvey: ProfessorSurveyStatus = "not_received";
+
+    if (invitation?.rejectedAt) {
+      statusSinceLastSurvey = "rejected";
+    } else if (invitation?.respondedAt) {
+      statusSinceLastSurvey = "received";
+    } else if (invitation && lastCampaign && isInvitationExpired(lastCampaign, invitation, now)) {
+      statusSinceLastSurvey = "expired";
+    }
+
+    const latestApprovedSnapshot = await prisma.labSnapshot.findFirst({
+      where: {
+        status: "approved",
+        lab: {
+          facultyEmail: {
+            equals: normalizedEmail,
+            mode: "insensitive",
+          },
+        },
+      },
+      include: {
+        lab: true,
+      },
+      orderBy: { lastVerifiedAt: "desc" },
+    });
+
+    items.push({
+      email: normalizedEmail,
+      isActive: contact.isActive,
+      statusSinceLastSurvey,
+      lastLabUpdateAt: latestApprovedSnapshot?.lastVerifiedAt.toISOString(),
+      labName: latestApprovedSnapshot?.lab.labName,
+      waveId: lastCampaign?.label,
+    });
+  }
+
+  return items;
 }
 
 export async function setProfessorContactState(email: string, isActive: boolean) {
@@ -161,6 +238,100 @@ export async function setProfessorContactState(email: string, isActive: boolean)
     create: { email: normalized, isActive },
     update: { isActive },
   });
+}
+
+export async function sendManualSurveyInvitations(inputEmails?: string[]): Promise<ManualSurveySendResult> {
+  if (!flags.hasSmtpConfig) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: "SMTP configuration missing",
+      delivered: [],
+      failed: [],
+    };
+  }
+
+  if (!env.QUALTRICS_SURVEY_LINK || env.QUALTRICS_SURVEY_LINK === "__PLACEHOLDER__") {
+    return {
+      ok: false,
+      skipped: true,
+      reason: "QUALTRICS_SURVEY_LINK missing",
+      delivered: [],
+      failed: [],
+    };
+  }
+
+  const emails = uniqueNormalizedEmails(inputEmails ?? (await getProfessorEmailsForCampaign()));
+
+  if (emails.length === 0) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: "No professor emails selected",
+      delivered: [],
+      failed: [],
+    };
+  }
+
+  const now = new Date();
+  const suffix = now.toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+  const waveId = `manual-${suffix}`;
+
+  const campaign = await prisma.surveyCampaign.create({
+    data: {
+      label: waveId,
+      semesterLabel: semesterLabelFromDate(now),
+      scheduledFor: now,
+      surveyLink: env.QUALTRICS_SURVEY_LINK,
+      graceDays: flags.campaignGraceDays,
+      status: CampaignStatus.launched,
+      launchedAt: now,
+    },
+  });
+
+  const messages = emails.map((facultyEmail) =>
+    buildInvitationMessage(
+      facultyEmail,
+      appendCampaignQuery(campaign.surveyLink, waveId, facultyEmail),
+      waveId,
+      campaign.graceDays,
+    ),
+  );
+
+  const sent = await sendBulkEmail(messages);
+
+  if (sent.delivered.length > 0) {
+    await prisma.surveyInvitation.createMany({
+      data: sent.delivered.map((facultyEmail) => ({
+        campaignId: campaign.id,
+        facultyEmail,
+        source: "manual",
+        suppressExpiry: true,
+        sentAt: now,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      entityType: "SurveyCampaign",
+      entityId: campaign.id,
+      action: "manual_send_campaign",
+      actorType: "admin",
+      metadata: {
+        delivered: sent.delivered.length,
+        failed: sent.failed.length,
+      } as Prisma.InputJsonValue,
+    },
+  });
+
+  return {
+    ok: sent.failed.length === 0,
+    waveId,
+    delivered: sent.delivered,
+    failed: sent.failed,
+  };
 }
 
 async function ensureCampaignsForYear(year: number): Promise<number> {
@@ -215,6 +386,46 @@ export async function ensureScheduledCampaigns(now: Date = new Date()) {
 interface LaunchCampaignOptions {
   now?: Date;
   professorEmails?: string[];
+}
+
+export type ProfessorSurveyStatus = "received" | "not_received" | "expired" | "rejected";
+
+export interface ProfessorContactStatusItem {
+  email: string;
+  isActive: boolean;
+  statusSinceLastSurvey: ProfessorSurveyStatus;
+  lastLabUpdateAt?: string;
+  labName?: string;
+  waveId?: string;
+}
+
+interface ManualSurveySendResult {
+  ok: boolean;
+  skipped?: boolean;
+  reason?: string;
+  waveId?: string;
+  delivered: string[];
+  failed: string[];
+}
+
+function isInvitationExpired(
+  campaign: { launchedAt: Date | null; graceDays: number; status: CampaignStatus },
+  invitation: { sentAt: Date; suppressExpiry: boolean; respondedAt: Date | null },
+  now: Date,
+): boolean {
+  if (invitation.suppressExpiry || invitation.respondedAt) {
+    return false;
+  }
+
+  if (campaign.status === CampaignStatus.closed) {
+    return true;
+  }
+
+  const baseline = campaign.launchedAt ?? invitation.sentAt;
+  const deadline = new Date(baseline);
+  deadline.setUTCDate(deadline.getUTCDate() + campaign.graceDays);
+
+  return deadline <= now;
 }
 
 export async function launchDueCampaigns(options?: LaunchCampaignOptions) {
@@ -297,6 +508,8 @@ export async function launchDueCampaigns(options?: LaunchCampaignOptions) {
           data: sent.delivered.map((facultyEmail) => ({
             campaignId: campaign.id,
             facultyEmail,
+            source: "scheduled",
+            suppressExpiry: false,
             sentAt: now,
           })),
           skipDuplicates: true,
@@ -352,6 +565,7 @@ export async function sendReminderEmails(now: Date = new Date()): Promise<Remind
     where: {
       respondedAt: null,
       reminderSentAt: null,
+      suppressExpiry: false,
       sentAt: { lte: threshold },
       campaign: {
         status: CampaignStatus.launched,
@@ -427,6 +641,11 @@ async function closeExpiredCampaigns(now: Date): Promise<ClosedCampaignWindow[]>
   const launched = await prisma.surveyCampaign.findMany({
     where: {
       status: CampaignStatus.launched,
+      label: {
+        not: {
+          startsWith: "manual-",
+        },
+      },
       launchedAt: {
         not: null,
       },
@@ -518,6 +737,7 @@ export async function recordSurveyResponseForFacultyEmail(
       where: { id: invitation.id },
       data: {
         respondedAt: options?.respondedAt ?? new Date(),
+        rejectedAt: null,
         responseSnapshotId: snapshotId,
       },
     });
@@ -540,6 +760,52 @@ export async function recordSurveyResponseForFacultyEmail(
   return {
     matched: true,
     campaignId: invitation.campaignId,
+    invitationId: invitation.id,
+  };
+}
+
+export async function markSurveyRejectedForFacultyEmail(
+  facultyEmail: string,
+  options?: { waveId?: string },
+) {
+  const normalizedEmail = normalizeEmail(facultyEmail);
+  if (!normalizedEmail) {
+    return { matched: false };
+  }
+
+  const invitation = await prisma.surveyInvitation.findFirst({
+    where: {
+      facultyEmail: normalizedEmail,
+      respondedAt: {
+        not: null,
+      },
+      rejectedAt: null,
+      ...(options?.waveId
+        ? {
+            campaign: {
+              label: options.waveId,
+            },
+          }
+        : {}),
+    },
+    orderBy: {
+      respondedAt: "desc",
+    },
+  });
+
+  if (!invitation) {
+    return { matched: false };
+  }
+
+  await prisma.surveyInvitation.update({
+    where: { id: invitation.id },
+    data: {
+      rejectedAt: new Date(),
+    },
+  });
+
+  return {
+    matched: true,
     invitationId: invitation.id,
   };
 }

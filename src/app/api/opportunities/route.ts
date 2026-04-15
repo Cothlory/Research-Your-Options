@@ -5,14 +5,12 @@ import { prisma } from "@/lib/db/client";
 
 export async function GET(req: NextRequest) {
   const query = req.nextUrl.searchParams.get("q")?.toLowerCase().trim() ?? "";
-  const department = req.nextUrl.searchParams.get("department")?.trim();
   const recruiting = req.nextUrl.searchParams.get("recruiting")?.trim();
 
   const snapshots = await prisma.labSnapshot.findMany({
     where: {
       isLatest: true,
       status: "approved",
-      ...(department ? { lab: { department } } : {}),
       ...(recruiting ? { recruitingUndergrads: recruiting === "true" } : {}),
       ...(query
         ? {
@@ -31,7 +29,6 @@ export async function GET(req: NextRequest) {
     snapshots.map((item) => ({
       id: item.id,
       labName: item.lab.labName,
-      department: item.lab.department,
       recruitingUndergrads: item.recruitingUndergrads,
       researchArea: item.researchArea,
       summaryText: item.summaryText,
