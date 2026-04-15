@@ -1,12 +1,10 @@
 // CORE LOGIC - avoid editing unless assigned
 
 import { NextResponse } from "next/server";
-import { mockQualtricsPayload } from "@/lib/qualtrics/mock-payload";
-import { ingestSurveySubmission } from "@/lib/services/ingestion-service";
 import { flags } from "@/lib/config/env";
 import { importQualtricsResponsesBatch } from "@/lib/services/qualtrics-batch-import-service";
 
-interface PollBody {
+interface BatchImportBody {
   waveId?: string;
   startDate?: string;
   endDate?: string;
@@ -26,16 +24,11 @@ function parseOptionalDate(value?: string): Date | undefined {
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => ({}))) as PollBody;
-
-  if (!flags.hasQualtricsApiConfig) {
-    const result = await ingestSurveySubmission({
-      payload: mockQualtricsPayload,
-      source: "qualtrics",
-    });
-
-    return NextResponse.json({ ok: true, mode: "mock-poll", result });
+  if (!flags.cronEnabled) {
+    return NextResponse.json({ ok: false, skipped: true, reason: "ENABLE_CRON_JOBS=false" });
   }
+
+  const body = (await req.json().catch(() => ({}))) as BatchImportBody;
 
   const result = await importQualtricsResponsesBatch({
     waveId: body.waveId,

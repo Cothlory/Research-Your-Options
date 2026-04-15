@@ -48,6 +48,13 @@ enum IssueStatus {
   published
 }
 
+enum CampaignStatus {
+  scheduled
+  launched
+  closed
+  canceled
+}
+
 model Lab {
   id            String         @id @default(cuid())
   labName       String
@@ -67,6 +74,8 @@ model LabSubmission {
   id               String    @id @default(cuid())
   labId            String
   source           SourceType @default(qualtrics)
+  qualtricsResponseId String? @unique
+  waveId           String?
   rawPayload       Json
   normalizedPayload Json
   submittedAt      DateTime
@@ -77,6 +86,7 @@ model LabSubmission {
   lab Lab @relation(fields: [labId], references: [id], onDelete: Cascade)
 
   @@index([labId, submittedAt])
+  @@index([waveId, submittedAt])
 }
 
 model LabSnapshot {
@@ -157,4 +167,45 @@ model AuditLog {
   createdAt  DateTime @default(now())
 
   @@index([entityType, entityId, createdAt])
+}
+
+model ProfessorContact {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  fullName  String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SurveyCampaign {
+  id            String            @id @default(cuid())
+  label         String            @unique
+  semesterLabel String
+  scheduledFor  DateTime
+  surveyLink    String
+  graceDays     Int               @default(7)
+  status        CampaignStatus    @default(scheduled)
+  launchedAt    DateTime?
+  closedAt      DateTime?
+  createdAt     DateTime          @default(now())
+  invitations   SurveyInvitation[]
+
+  @@index([status, scheduledFor])
+}
+
+model SurveyInvitation {
+  id               String         @id @default(cuid())
+  campaignId       String
+  facultyEmail     String
+  sentAt           DateTime       @default(now())
+  reminderSentAt   DateTime?
+  respondedAt      DateTime?
+  responseSnapshotId String?
+
+  campaign SurveyCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, facultyEmail])
+  @@index([facultyEmail, sentAt])
+  @@index([respondedAt])
 }

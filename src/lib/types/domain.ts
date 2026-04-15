@@ -37,6 +37,11 @@ export interface SummaryResult {
   provider: "mock" | "openai";
   promptVersion: string;
   outputText: string;
+  structured?: {
+    summary: string;
+    qualifications: string;
+    studentFit: string;
+  };
 }
 
 export interface NewsletterEntry {

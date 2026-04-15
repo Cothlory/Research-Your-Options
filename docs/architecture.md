@@ -2,13 +2,13 @@
 
 ## Layered Design
 
-- Input layer: Qualtrics webhook + polling placeholders.
+- Input layer: Qualtrics scheduled export ingestion + API polling fallback + scheduled faculty campaign outreach.
 - Processing layer: normalization, validation, dedup matching.
 - Enrichment layer: website fetch/parse utility.
 - AI layer: summarizer provider interface with mock fallback.
 - Review layer: admin actions for approve/reject/edit/regenerate.
-- Storage layer: Prisma models for labs, submissions, snapshots, drafts, publication, subscribers, admins, audits.
-- Delivery layer: public listing pages + newsletter export endpoint.
+- Storage layer: Prisma models for labs, submissions, snapshots, drafts, publication, campaign tracking, subscribers, admins, audits.
+- Delivery layer: public listing pages + newsletter export endpoint + Google Sheets sync + Substack publish endpoint.
 
 ## Why this structure
 

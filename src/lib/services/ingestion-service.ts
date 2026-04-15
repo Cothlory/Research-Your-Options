@@ -8,13 +8,64 @@ import { buildLabMatchKey } from "@/lib/domain/lab-matching";
 import { fetchAndParseWebsiteText } from "@/lib/scraping/fetch-and-parse";
 import { getSummarizerProvider } from "@/lib/llm/service";
 import { semesterLabelFromDate } from "@/lib/domain/snapshot";
+import { recordSurveyResponseForFacultyEmail } from "@/lib/services/campaign-service";
+import { syncLatestSnapshotsToGoogleSheet } from "@/lib/publication/google-sheets";
 
 interface IngestInput {
   payload: unknown;
   source: "qualtrics" | "manual";
+  qualtricsResponseId?: string;
+  submittedAt?: Date;
+  waveId?: string;
+  syncGoogleSheet?: boolean;
 }
 
-export async function ingestSurveySubmission({ payload, source }: IngestInput) {
+export async function ingestSurveySubmission({
+  payload,
+  source,
+  qualtricsResponseId,
+  submittedAt,
+  waveId,
+  syncGoogleSheet,
+}: IngestInput) {
+  const effectiveSubmittedAt = submittedAt ?? new Date();
+
+  if (source === "qualtrics" && qualtricsResponseId) {
+    const existingSubmission = await prisma.labSubmission.findUnique({
+      where: { qualtricsResponseId },
+      select: { id: true, labId: true, ingestionStatus: true },
+    });
+
+    if (existingSubmission) {
+      if (existingSubmission.ingestionStatus === EntryStatus.pending_ingestion) {
+        await prisma.labSubmission.delete({
+          where: { id: existingSubmission.id },
+        });
+      } else {
+        return {
+          ok: true,
+          duplicate: true,
+          labId: existingSubmission.labId,
+          submissionId: existingSubmission.id,
+        };
+      }
+    }
+
+    const afterDeleteSubmission = await prisma.labSubmission.findUnique({
+      where: { qualtricsResponseId },
+      select: { id: true, labId: true },
+    });
+
+    if (afterDeleteSubmission) {
+      return {
+        ok: true,
+        duplicate: true,
+        labId: afterDeleteSubmission.labId,
+        submissionId: afterDeleteSubmission.id,
+      };
+    }
+  }
+
   const normalizedPayload = mapQualtricsToNormalized(payload as Record<string, unknown>);
   const validation = validateNormalizedPayload(normalizedPayload);
   const matchKey = buildLabMatchKey(normalizedPayload);
@@ -43,9 +94,11 @@ export async function ingestSurveySubmission({ payload, source }: IngestInput) {
     data: {
       labId: lab.id,
       source,
+      qualtricsResponseId,
+      waveId,
       rawPayload: payload as Prisma.InputJsonValue,
       normalizedPayload: normalizedPayload as unknown as Prisma.InputJsonValue,
-      submittedAt: new Date(),
+      submittedAt: effectiveSubmittedAt,
       ingestionStatus: validation.valid ? EntryStatus.pending_summary : EntryStatus.pending_ingestion,
       validationErrors: validation.valid ? undefined : validation.errors,
     },
@@ -83,7 +136,7 @@ export async function ingestSurveySubmission({ payload, source }: IngestInput) {
       websiteUrl: normalizedPayload.websiteUrl,
       sourceText: scrapeResult.sourceText,
       summaryText: summary.outputText,
-      lastVerifiedAt: new Date(),
+      lastVerifiedAt: effectiveSubmittedAt,
       status: EntryStatus.pending_review,
       statusProvenance: "from_survey",
       summaryProvenance: summary.provider === "mock" ? "from_llm" : "from_llm",
@@ -113,10 +166,25 @@ export async function ingestSurveySubmission({ payload, source }: IngestInput) {
     },
   });
 
+  const campaignMatch =
+    source === "qualtrics" && normalizedPayload.facultyEmail
+      ? await recordSurveyResponseForFacultyEmail(normalizedPayload.facultyEmail, snapshot.id, {
+          waveId,
+          respondedAt: effectiveSubmittedAt,
+        })
+      : { matched: false };
+
+  const googleSheetSync =
+    source === "qualtrics" && (syncGoogleSheet ?? true)
+      ? await syncLatestSnapshotsToGoogleSheet()
+      : undefined;
+
   return {
     ok: true,
     labId: lab.id,
     snapshotId: snapshot.id,
+    campaignMatched: campaignMatch.matched,
+    googleSheetSync,
     scrapeWarning: scrapeResult.ok ? undefined : scrapeResult.error,
   };
 }

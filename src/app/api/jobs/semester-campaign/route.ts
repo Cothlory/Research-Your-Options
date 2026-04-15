@@ -2,12 +2,21 @@
 
 import { NextResponse } from "next/server";
 import { flags } from "@/lib/config/env";
+import { launchDueCampaigns } from "@/lib/services/campaign-service";
 
-export async function POST() {
+interface SemesterCampaignBody {
+  professorEmails?: string[];
+}
+
+export async function POST(req: Request) {
   if (!flags.cronEnabled) {
     return NextResponse.json({ ok: false, skipped: true, reason: "ENABLE_CRON_JOBS=false" });
   }
 
-  // TODO(owner=me): implement survey campaign email orchestration.
-  return NextResponse.json({ ok: true, message: "Semester campaign placeholder executed." });
+  const body = (await req.json().catch(() => ({}))) as SemesterCampaignBody;
+  const result = await launchDueCampaigns({
+    professorEmails: body.professorEmails,
+  });
+
+  return NextResponse.json({ ok: true, ...result });
 }

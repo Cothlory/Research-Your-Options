@@ -10,7 +10,7 @@ Source-of-truth specification: [docs/project-spec.md](docs/project-spec.md)
 - Persistence: PostgreSQL via Prisma.
 - Validation: Zod schemas.
 - AI: provider interface with deterministic mock fallback.
-- Scheduling: cron-friendly route placeholders, gated by env flags.
+- Scheduling: cron-friendly campaign/reminder jobs, gated by env flags.
 
 Rationale: fastest production-friendly MVP with clear modular boundaries.
 
@@ -86,6 +86,14 @@ Environment template: [.env.example](.env.example)
 
 Keep placeholders for local-first development, then replace with real values in deployment secrets.
 
+Integration groups:
+- Qualtrics campaign + polling: `QUALTRICS_*`, `SURVEY_CAMPAIGN_DATES`, `SURVEY_GRACE_DAYS`
+- Qualtrics batch import specifics: `QUALTRICS_DEFAULT_TIMEZONE`, `QUALTRICS_WAVE_EMBEDDED_DATA_KEY`
+- OpenAI structured summaries: `OPENAI_*`
+- Google Sheets sync: `GOOGLE_SHEETS_*`, `GOOGLE_SERVICE_ACCOUNT_*`
+- Substack publishing: `SUBSTACK_*`
+- SMTP delivery for faculty reminders and subscriber fallback: `SMTP_*`, `EMAIL_FROM`
+
 ## Test Commands
 
 ```bash
@@ -102,7 +110,22 @@ pnpm test:e2e
 - Optional cron route triggers:
 	- `POST /api/jobs/semester-campaign`
 	- `POST /api/jobs/reminder-email`
+	- `POST /api/jobs/qualtrics-batch-import`
 	- `POST /api/jobs/staleness-audit`
+
+## Implemented Automation Pipeline
+
+1. Manage professor list via `GET/PUT/PATCH /api/admin/professors`.
+2. Trigger `POST /api/jobs/semester-campaign` to launch due campaign dates and send survey invitations.
+3. After grace closes, run `POST /api/jobs/qualtrics-batch-import` (or `POST /api/qualtrics/poll`) to pull responses through Qualtrics Export API.
+4. Ingestion updates DB, regenerates latest snapshot, and marks invitation as responded.
+5. Updated rows sync to Google Sheets (`lab name`, `summary`, `qualifications`, `link`).
+6. Build issue export via `POST /api/admin/publication/export`.
+7. Publish via `POST /api/admin/publication/publish` with optional poster URLs from Figma output.
+
+Supporting admin endpoints:
+- `POST /api/admin/publication/sync-sheet`
+- `POST /api/admin/publication/publish`
 
 ## Mock Mode
 

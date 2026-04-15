@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { requireAdminApiAuth } from "@/lib/auth/admin-session";
 import { approveSnapshot, editSummary, rejectSnapshot } from "@/lib/services/review-service";
 
 const ReviewSchema = z.object({
@@ -11,6 +12,11 @@ const ReviewSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const unauthorized = requireAdminApiAuth(req);
+  if (unauthorized) {
+    return unauthorized;
+  }
+
   const body = await req.json();
   const parsed = ReviewSchema.safeParse(body);
 

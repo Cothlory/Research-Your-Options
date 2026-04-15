@@ -20,7 +20,9 @@
     "@tanstack/react-query": "^5.96.0",
     "cheerio": "^1.2.0",
     "date-fns": "^4.1.0",
+    "jszip": "^3.10.1",
     "next": "16.2.1",
+    "nodemailer": "^8.0.5",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "zod": "^4.3.6"
@@ -29,6 +31,7 @@
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^4.1.2",

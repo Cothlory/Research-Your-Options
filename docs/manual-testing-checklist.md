@@ -24,8 +24,9 @@
 
 ## API / reliability
 
-- [ ] Webhook endpoint rejects invalid secret when configured
-- [ ] Poll endpoint returns mock response
+- [ ] Qualtrics batch import endpoint runs with start/end date window
+- [ ] Batch import deduplicates repeated responseId records
+- [ ] `waveId` filter only ingests records from the intended campaign wave
 - [ ] Broken website fetch does not crash ingestion
 - [ ] Empty summary edit returns validation error
 
