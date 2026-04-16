@@ -33,7 +33,6 @@ describe("qualtrics adapter", () => {
     expect(mapped.researchArea).toBe("Computer vision and medical imaging");
     expect(mapped.desiredSkills).toBe("Python, linear algebra");
     expect(mapped.websiteUrl).toBe("https://engineering.virginia.edu/labs/imaging");
-    expect(mapped.department).toBe("Unknown Department");
   });
 
   it("maps shifted QID11 email and QID10 recruiting fields", () => {

@@ -7,7 +7,6 @@ export const QualtricsNormalizedSchema = z.object({
   labName: z.string().trim().min(1, "missing lab name"),
   facultyName: z.string().trim().min(1).default("Unknown Faculty"),
   facultyEmail: z.string().email().optional().or(z.literal("")).transform((v) => v || undefined),
-  department: z.string().trim().min(1).default("Unknown Department"),
   researchArea: z.string().optional(),
   recruitingUndergrads: z.boolean({
     error: "missing recruiting status",

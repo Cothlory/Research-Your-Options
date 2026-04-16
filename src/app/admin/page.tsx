@@ -48,6 +48,16 @@ type StudentItem = {
   unsubscribedAt?: string | null;
 };
 
+type ManualIssueEmailResponse = {
+  ok: boolean;
+  published: false;
+  skipped?: boolean;
+  reason?: string;
+  subscriberFallbackCount?: number;
+  markdownPreview: string;
+  issueId: string;
+};
+
 async function getAdminSession(): Promise<SessionResponse> {
   const res = await fetch("/api/admin/auth/session", { cache: "no-store" });
   if (!res.ok) {
@@ -217,6 +227,26 @@ async function collectManualSurvey(): Promise<void> {
   }
 }
 
+async function sendManualPublicationEmail(issueId?: string): Promise<ManualIssueEmailResponse> {
+  const res = await fetch("/api/admin/publication/manual-email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ issueId }),
+  });
+
+  const payload = (await res.json()) as Partial<ManualIssueEmailResponse> & {
+    ok?: boolean;
+    error?: string;
+    reason?: string;
+  };
+
+  if (!res.ok || payload.ok !== true) {
+    throw new Error(payload.error ?? payload.reason ?? "Failed to send issue to subscribers.");
+  }
+
+  return payload as ManualIssueEmailResponse;
+}
+
 function formatDate(value?: string | null): string {
   if (!value) {
     return "-";
@@ -238,9 +268,11 @@ export default function AdminPage() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
 
+  const [manualIssueId, setManualIssueId] = useState("");
   const [newProfessorEmail, setNewProfessorEmail] = useState("");
   const [newStudentEmail, setNewStudentEmail] = useState("");
   const [selectedProfessorEmails, setSelectedProfessorEmails] = useState<Record<string, boolean>>(
@@ -406,6 +438,7 @@ export default function AdminPage() {
       ) : null}
 
       {actionError ? <p className="text-sm text-rose-700">{actionError}</p> : null}
+      {actionNotice ? <p className="text-sm text-emerald-700">{actionNotice}</p> : null}
 
       <article className="rounded-2xl border border-slate-200 bg-white p-5">
         <h2 className="text-xl font-bold text-slate-900">Manual survey operations</h2>
@@ -454,6 +487,57 @@ export default function AdminPage() {
             className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
             Collect past 7-day survey responses
+          </button>
+        </div>
+      </article>
+
+      <article className="rounded-2xl border border-slate-200 bg-white p-5">
+        <h2 className="text-xl font-bold text-slate-900">Publication email operations</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Send the latest publication issue (or a specific issue ID) to all active student
+          subscribers.
+        </p>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <input
+            type="text"
+            value={manualIssueId}
+            onChange={(event) => setManualIssueId(event.target.value)}
+            placeholder="Issue ID (optional: latest issue)"
+            className="w-96 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
+
+          <button
+            onClick={async () => {
+              setActionError(null);
+              setActionNotice(null);
+              setActionBusyId("manual-publication-email");
+
+              try {
+                const result = await sendManualPublicationEmail(manualIssueId.trim() || undefined);
+                const sentCount = result.subscriberFallbackCount ?? 0;
+
+                if (result.skipped) {
+                  setActionNotice(result.reason ?? "Manual issue email send skipped.");
+                } else {
+                  setActionNotice(
+                    `Sent issue ${result.issueId} to ${sentCount} active subscriber${sentCount === 1 ? "" : "s"}.`,
+                  );
+                }
+              } catch (error) {
+                setActionError(
+                  error instanceof Error
+                    ? error.message
+                    : "Failed to send issue email to subscribers.",
+                );
+              } finally {
+                setActionBusyId(null);
+              }
+            }}
+            disabled={isBusy}
+            className="rounded-lg bg-indigo-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            Manual send issue email
           </button>
         </div>
       </article>

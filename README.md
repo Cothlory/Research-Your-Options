@@ -91,7 +91,8 @@ Integration groups:
 - Qualtrics batch import specifics: `QUALTRICS_DEFAULT_TIMEZONE`, `QUALTRICS_WAVE_EMBEDDED_DATA_KEY`
 - OpenAI structured summaries: `OPENAI_*`
 - Google Sheets sync: `GOOGLE_SHEETS_*`, `GOOGLE_SERVICE_ACCOUNT_*`
-- Substack publishing: `SUBSTACK_*`
+- Substack publishing: `SUBSTACK_*` (supports `SUBSTACK_API_TOKEN` or cookie-style auth via `SUBSTACK_AUTH_COOKIE`, such as `connect.sid=...`)
+- Card image URLs in Substack markdown use `APP_BASE_URL`; set this to your public deployment URL in production.
 - SMTP delivery for faculty reminders and subscriber fallback: `SMTP_*`, `EMAIL_FROM`
 
 ## Test Commands
@@ -121,11 +122,12 @@ pnpm test:e2e
 4. Ingestion updates DB, regenerates latest snapshot, and marks invitation as responded.
 5. Updated rows sync to Google Sheets (`lab name`, `summary`, `qualifications`, `link`).
 6. Build issue export via `POST /api/admin/publication/export`.
-7. Publish via `POST /api/admin/publication/publish` with optional poster URLs from Figma output.
+7. Publish via `POST /api/admin/publication/publish`; it auto-generates card image URLs for all approved latest snapshots, with optional manual poster URL overrides.
 
 Supporting admin endpoints:
 - `POST /api/admin/publication/sync-sheet`
 - `POST /api/admin/publication/publish`
+- `POST /api/admin/publication/manual-email`
 
 ## Mock Mode
 

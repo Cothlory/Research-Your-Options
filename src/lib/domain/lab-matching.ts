@@ -3,5 +3,9 @@
 import type { NormalizedSurveyPayload } from "@/lib/types/domain";
 
 export function buildLabMatchKey(payload: NormalizedSurveyPayload): string {
-  return `${payload.labName.toLowerCase().trim()}::${payload.department.toLowerCase().trim()}`;
+  const labName = payload.labName.toLowerCase().trim();
+  const facultyEmail = payload.facultyEmail?.toLowerCase().trim();
+  const facultyName = payload.facultyName.toLowerCase().trim();
+
+  return `${labName}::${facultyEmail || facultyName}`;
 }

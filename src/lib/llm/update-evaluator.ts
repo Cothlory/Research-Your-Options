@@ -52,7 +52,6 @@ const LAB_SIGNALS = [
   "research",
   "lab",
   "university",
-  "department",
   "faculty",
   "graduate",
   "publication",

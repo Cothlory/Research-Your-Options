@@ -41,7 +41,7 @@ export default function OpportunitiesPage() {
   }, [data, recruiting, search]);
 
   return (
-    <section className="mx-auto max-w-6xl px-4 py-10">
+    <section className="mx-auto max-w-7xl px-4 py-10">
       <h1 className="text-3xl font-extrabold text-slate-900">Research opportunities</h1>
       <p className="mt-2 text-sm text-slate-700">
         Search by lab name or topic, then filter by recruiting status.
@@ -65,7 +65,7 @@ export default function OpportunitiesPage() {
         </select>
       </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
+      <div className="mt-6 grid gap-6 md:grid-cols-2">
         {isLoading ? <LoadingState /> : null}
         {isError ? <ErrorState message={(error as Error).message} /> : null}
         {!isLoading && !isError && filtered.length === 0 ? <EmptyState /> : null}

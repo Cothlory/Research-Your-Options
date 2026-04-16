@@ -6,7 +6,6 @@
 - [ ] Opportunities page loads without crashing
 - [ ] Search by lab name filters list
 - [ ] Search by topic filters list
-- [ ] Department filter works
 - [ ] Recruiting filter works
 - [ ] Every listing shows a visible last-updated timestamp
 - [ ] About page content is readable

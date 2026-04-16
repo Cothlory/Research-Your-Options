@@ -20,7 +20,7 @@ This guide is for teammates implementing UI-only tasks.
 Use existing component contracts.
 
 Example from lab card:
-- keep prop names `lab.labName`, `lab.department`, `lab.updatedAt`
+- keep prop names `lab.labName`, `lab.recruitingUndergrads`, `lab.updatedAt`
 - only adjust presentation and copy
 
 ## Definition of done checklist

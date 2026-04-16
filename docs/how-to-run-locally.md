@@ -13,13 +13,14 @@
 2. Copy env template
    - `cp .env.example .env`
 3. Set `DATABASE_URL` in `.env`
-4. Generate Prisma client
+4. If you will test Substack publish, set `APP_BASE_URL` to a publicly reachable URL (for card image links) and set `SUBSTACK_*` values.
+5. Generate Prisma client
    - `pnpm prisma:generate`
-5. Push schema
+6. Push schema
    - `pnpm db:push`
-6. Seed demo data
+7. Seed demo data
    - `pnpm db:seed`
-7. Start app
+8. Start app
    - `pnpm dev`
 
 ## Useful endpoints

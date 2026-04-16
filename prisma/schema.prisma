@@ -65,7 +65,6 @@ model Lab {
   labName       String
   facultyName   String
   facultyEmail  String?
-  department    String
   websiteUrl    String?
   currentStatus EntryStatus    @default(pending_ingestion)
   createdAt     DateTime       @default(now())

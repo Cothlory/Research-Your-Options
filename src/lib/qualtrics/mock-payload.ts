@@ -5,7 +5,6 @@ export const mockQualtricsPayload = {
     lab_name: "Computational Materials Lab",
     faculty_name: "Dr. Elena Morris",
     faculty_email: "emorris@virginia.edu",
-    department: "Materials Science and Engineering",
     research_area: "Battery materials modeling and simulation",
     recruiting_undergrads: "true",
     website_url: "https://engineering.virginia.edu",

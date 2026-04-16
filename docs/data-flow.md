@@ -37,5 +37,5 @@
 1. `POST /api/admin/publication/export` queries approved latest snapshots.
 2. Renderer builds HTML + Markdown.
 3. Issue saved as `PublicationIssue`.
-4. Optional `POST /api/admin/publication/publish` sends templated post to Substack endpoint.
+4. Optional `POST /api/admin/publication/publish` sends an image-first post to Substack, auto-attaching all latest approved card images from `GET /api/publication/cards?snapshotId=...`.
 5. If Substack endpoint is not configured, issue can fallback to SMTP delivery to active student subscribers.

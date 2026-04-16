@@ -20,7 +20,6 @@ export async function generatePublicationIssue(title: string, semesterLabel: str
   const entries = snapshots.map((snapshot) => ({
     labName: snapshot.lab.labName,
     shortSummary: snapshot.summaryText ?? "Summary pending manual edit.",
-    department: snapshot.lab.department,
     recruitingUndergrads: snapshot.recruitingUndergrads,
     websiteUrl: snapshot.websiteUrl ?? undefined,
     updatedAt: snapshot.lastVerifiedAt.toISOString(),

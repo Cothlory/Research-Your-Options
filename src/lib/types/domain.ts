@@ -19,7 +19,6 @@ export interface NormalizedSurveyPayload {
   labName: string;
   facultyName: string;
   facultyEmail?: string;
-  department: string;
   researchArea?: string;
   recruitingUndergrads: boolean;
   websiteUrl?: string;
@@ -48,7 +47,6 @@ export interface SummaryResult {
 export interface NewsletterEntry {
   labName: string;
   shortSummary: string;
-  department: string;
   recruitingUndergrads: boolean;
   websiteUrl?: string;
   updatedAt: string;

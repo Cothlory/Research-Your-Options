@@ -128,13 +128,11 @@ function buildLabIdentityUpdates(
     labName: string;
     facultyName: string;
     facultyEmail: string | null;
-    department: string;
     websiteUrl: string | null;
   },
   payload: {
     labName: string;
     facultyName: string;
-    department: string;
     websiteUrl?: string;
   },
   facultyEmail?: string,
@@ -147,10 +145,6 @@ function buildLabIdentityUpdates(
 
   if (payload.facultyName && payload.facultyName !== lab.facultyName) {
     updates.facultyName = payload.facultyName;
-  }
-
-  if (payload.department && payload.department !== lab.department) {
-    updates.department = payload.department;
   }
 
   if (payload.websiteUrl && payload.websiteUrl !== lab.websiteUrl) {
@@ -248,7 +242,6 @@ export async function ingestSurveySubmission({
   const existingLabByName = await prisma.lab.findFirst({
     where: {
       labName: normalizedPayload.labName,
-      department: normalizedPayload.department,
     },
   });
 
@@ -261,7 +254,6 @@ export async function ingestSurveySubmission({
         labName: normalizedPayload.labName || `Unknown lab (${matchKey})`,
         facultyName: normalizedPayload.facultyName || "Unknown Faculty",
         facultyEmail,
-        department: normalizedPayload.department || "Unknown Department",
         websiteUrl: normalizedPayload.websiteUrl,
         currentStatus: validation.valid ? EntryStatus.pending_summary : EntryStatus.pending_ingestion,
       },
@@ -272,7 +264,6 @@ export async function ingestSurveySubmission({
     {
       labName: normalizedPayload.labName,
       facultyName: normalizedPayload.facultyName,
-      department: normalizedPayload.department,
       websiteUrl: normalizedPayload.websiteUrl,
     },
     facultyEmail,
@@ -337,7 +328,6 @@ export async function ingestSurveySubmission({
   const baseline = {
     labName: latestApprovedSnapshot ? lab.labName : undefined,
     facultyName: latestApprovedSnapshot ? lab.facultyName : undefined,
-    department: latestApprovedSnapshot ? lab.department : undefined,
     websiteUrl: latestApprovedSnapshot?.websiteUrl ?? lab.websiteUrl,
     researchArea: latestApprovedSnapshot?.researchArea,
     recruitingUndergrads: latestApprovedSnapshot?.recruitingUndergrads ?? false,
@@ -350,7 +340,6 @@ export async function ingestSurveySubmission({
   const candidate = {
     labName: normalizedPayload.labName || lab.labName,
     facultyName: normalizedPayload.facultyName || lab.facultyName,
-    department: normalizedPayload.department || lab.department,
     websiteUrl: normalizedPayload.websiteUrl ?? lab.websiteUrl,
     researchArea: normalizedPayload.researchArea,
     recruitingUndergrads: normalizedPayload.recruitingUndergrads,
@@ -366,11 +355,6 @@ export async function ingestSurveySubmission({
       field: "facultyName",
       previousValue: baseline.facultyName ?? "",
       nextValue: candidate.facultyName ?? "",
-    },
-    {
-      field: "department",
-      previousValue: baseline.department ?? "",
-      nextValue: candidate.department ?? "",
     },
     {
       field: "websiteUrl",
@@ -672,9 +656,6 @@ export async function ingestSurveySubmission({
         chooseUpdatedString("facultyName", updateFields, candidate.facultyName, lab.facultyName) ??
         lab.facultyName,
       facultyEmail: resolvedFacultyEmail,
-      department:
-        chooseUpdatedString("department", updateFields, candidate.department, lab.department) ??
-        lab.department,
       websiteUrl: resolved.websiteUrl,
     },
   });

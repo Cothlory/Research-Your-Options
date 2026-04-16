@@ -16,7 +16,6 @@ export function renderNewsletterIssue(
     return [
       `## ${entry.labName}`,
       `${entry.shortSummary}`,
-      `- Department: ${entry.department}`,
       `- Recruiting: ${entry.recruitingUndergrads ? "Yes" : "No"}`,
       `- Website: ${entry.websiteUrl ?? "N/A"}`,
       `- Last updated: ${entry.updatedAt}`,
@@ -32,7 +31,6 @@ export function renderNewsletterIssue(
           <h2 style="margin:0 0 8px 0;">${entry.labName}</h2>
           <p style="margin:0 0 8px 0;">${entry.shortSummary}</p>
           <ul style="margin:0;padding-left:18px;">
-            <li><strong>Department:</strong> ${entry.department}</li>
             <li><strong>Recruiting:</strong> ${entry.recruitingUndergrads ? "Yes" : "No"}</li>
             <li><strong>Website:</strong> ${entry.websiteUrl ?? "N/A"}</li>
             <li><strong>Last updated:</strong> ${entry.updatedAt}</li>

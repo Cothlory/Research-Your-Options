@@ -2,13 +2,17 @@
 
 import { prisma } from "@/lib/db/client";
 import { env, flags } from "@/lib/config/env";
-import { sendBulkEmail } from "@/lib/email/smtp";
+import { sendBulkEmail, type EmailAttachment } from "@/lib/email/smtp";
 import { logger } from "@/lib/logger";
-
-export interface PosterAssetInput {
-  labName: string;
-  imageUrl: string;
-}
+import {
+  applyPosterAssets,
+  buildAutoPosterAssets,
+  buildSubstackImageOnlyHtml,
+  buildSubstackImageOnlyMarkdown,
+  normalizePosterAssets,
+  type PosterAssetInput,
+  type SubstackImageEntry,
+} from "@/lib/publication/substack-template";
 
 interface SubstackPostPayload {
   title: string;
@@ -31,64 +35,143 @@ export interface PublishIssueResult {
   markdownPreview: string;
 }
 
-function normalizePosterAssets(posters: PosterAssetInput[]): Map<string, string> {
-  const map = new Map<string, string>();
+interface SubscriberEmailSendResult {
+  sent: number;
+  failed: number;
+  skipped?: boolean;
+  reason?: string;
+}
 
-  for (const poster of posters) {
-    const name = poster.labName.trim().toLowerCase();
-    const url = poster.imageUrl.trim();
-    if (name && url) {
-      map.set(name, url);
+interface IssuePublicationContent {
+  issue: {
+    id: string;
+    title: string;
+    semesterLabel: string;
+  };
+  markdown: string;
+  html: string;
+  imageEntries: SubstackImageEntry[];
+}
+
+function isLocalOrInsecureImageUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    const isLocalHost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+    const isPrivateIpv4 =
+      /^10\./.test(hostname) ||
+      /^192\.168\./.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname);
+
+    return parsed.protocol === "http:" || isLocalHost || isPrivateIpv4;
+  } catch {
+    return false;
+  }
+}
+
+function extensionFromContentType(contentType: string): string {
+  if (contentType === "image/png") {
+    return "png";
+  }
+  if (contentType === "image/jpeg") {
+    return "jpg";
+  }
+  if (contentType === "image/webp") {
+    return "webp";
+  }
+  if (contentType === "image/gif") {
+    return "gif";
+  }
+  if (contentType === "image/svg+xml") {
+    return "svg";
+  }
+
+  return "png";
+}
+
+async function buildInlineEmailAssets(content: IssuePublicationContent): Promise<{
+  html: string;
+  attachments: EmailAttachment[];
+}> {
+  const cidEntries: SubstackImageEntry[] = [...content.imageEntries];
+  const attachments: EmailAttachment[] = [];
+
+  for (let i = 0; i < cidEntries.length; i += 1) {
+    const entry = cidEntries[i];
+    if (!entry?.imageUrl || !isLocalOrInsecureImageUrl(entry.imageUrl)) {
+      continue;
+    }
+
+    try {
+      const response = await fetch(entry.imageUrl, { cache: "no-store" });
+      if (!response.ok) {
+        logger.warn("Skipping inline image attach: image URL fetch failed", {
+          labName: entry.labName,
+          status: response.status,
+        });
+        continue;
+      }
+
+      const contentType = (response.headers.get("content-type") || "image/png")
+        .split(";")[0]
+        .trim()
+        .toLowerCase();
+
+      if (!contentType.startsWith("image/")) {
+        logger.warn("Skipping inline image attach: non-image content type", {
+          labName: entry.labName,
+          contentType,
+        });
+        continue;
+      }
+
+      const imageBuffer = Buffer.from(await response.arrayBuffer());
+      if (imageBuffer.byteLength === 0) {
+        logger.warn("Skipping inline image attach: empty image content", {
+          labName: entry.labName,
+        });
+        continue;
+      }
+
+      const cid = `lab-card-${i}-${Date.now()}@research-options`;
+      const extension = extensionFromContentType(contentType);
+
+      attachments.push({
+        filename: `lab-card-${i + 1}.${extension}`,
+        content: imageBuffer,
+        contentType,
+        cid,
+        disposition: "inline",
+      });
+
+      cidEntries[i] = {
+        ...entry,
+        imageUrl: `cid:${cid}`,
+      };
+    } catch (error) {
+      logger.warn("Skipping inline image attach: unexpected fetch error", {
+        labName: entry.labName,
+        error,
+      });
     }
   }
 
-  return map;
+  if (attachments.length === 0) {
+    return {
+      html: content.html,
+      attachments: [],
+    };
+  }
+
+  return {
+    html: buildSubstackImageOnlyHtml(content.issue.title, content.issue.semesterLabel, cidEntries),
+    attachments,
+  };
 }
 
-function buildSubstackTemplate(
-  title: string,
-  semesterLabel: string,
-  entries: Array<{
-    labName: string;
-    summary: string;
-    qualifications: string;
-    websiteUrl?: string | null;
-    updatedAt: string;
-  }>,
-  posters: Map<string, string>,
-): string {
-  const blocks = entries.map((entry) => {
-    const posterUrl = posters.get(entry.labName.toLowerCase());
-
-    const lines = [
-      `## ${entry.labName}`,
-      "",
-      posterUrl ? `![${entry.labName} poster](${posterUrl})` : "",
-      posterUrl ? "" : "",
-      entry.summary,
-      "",
-      `- Qualifications: ${entry.qualifications}`,
-      `- Lab Website: ${entry.websiteUrl ?? "N/A"}`,
-      `- Last Updated: ${entry.updatedAt}`,
-    ];
-
-    return lines.filter((line, index) => !(line === "" && lines[index - 1] === "")).join("\n");
-  });
-
-  return [
-    `# ${title}`,
-    "",
-    "Welcome to this issue of Research Starters Hub. Below are the newest lab updates for undergraduates.",
-    "",
-    `Semester: ${semesterLabel}`,
-    "",
-    ...blocks,
-    "",
-    "If you are interested in a lab, visit the website first and send a concise email introducing yourself.",
-  ].join("\n");
-}
-
-async function sendIssueToStudentSubscribers(subject: string, markdownBody: string) {
+async function sendIssueToStudentSubscribers(
+  content: IssuePublicationContent,
+): Promise<SubscriberEmailSendResult> {
   const subscribers = await prisma.studentSubscriber.findMany({
     where: { isActive: true },
     select: { email: true },
@@ -97,24 +180,43 @@ async function sendIssueToStudentSubscribers(subject: string, markdownBody: stri
   if (subscribers.length === 0) {
     return {
       sent: 0,
+      failed: 0,
+      skipped: true,
+      reason: "No active student subscribers",
     };
   }
 
+  const inlineAssets = await buildInlineEmailAssets(content);
+
   const messages = subscribers.map((subscriber) => ({
     to: subscriber.email,
-    subject,
-    text: markdownBody,
+    subject: content.issue.title,
+    text: content.markdown,
+    html: inlineAssets.html,
+    attachments: inlineAssets.attachments,
   }));
 
   const sent = await sendBulkEmail(messages);
+
   return {
     sent: sent.delivered.length,
+    failed: sent.failed.length,
+    skipped: sent.skipped,
+    reason: sent.reason,
   };
 }
 
-export async function publishIssueToSubstack(issueId: string, posters: PosterAssetInput[]) {
+async function buildIssuePublicationContent(
+  issueId: string,
+  posters: PosterAssetInput[],
+): Promise<IssuePublicationContent> {
   const issue = await prisma.publicationIssue.findUnique({
     where: { id: issueId },
+    select: {
+      id: true,
+      title: true,
+      semesterLabel: true,
+    },
   });
 
   if (!issue) {
@@ -132,38 +234,60 @@ export async function publishIssueToSubstack(issueId: string, posters: PosterAss
 
   const entries = snapshots.map((snapshot) => ({
     labName: snapshot.lab.labName,
-    summary: snapshot.summaryText ?? "Summary pending",
-    qualifications: snapshot.desiredSkills ?? snapshot.optionalNotes ?? "Not specified",
-    websiteUrl: snapshot.websiteUrl,
-    updatedAt: snapshot.lastVerifiedAt.toISOString().slice(0, 10),
   }));
 
-  const markdown = buildSubstackTemplate(
-    issue.title,
-    issue.semesterLabel,
-    entries,
-    normalizePosterAssets(posters),
-  );
+  const automaticPosters = buildAutoPosterAssets(env.APP_BASE_URL, snapshots);
+  const posterMap = normalizePosterAssets([...automaticPosters, ...posters]);
+  const imageEntries = applyPosterAssets(entries, posterMap);
+
+  return {
+    issue,
+    imageEntries,
+    markdown: buildSubstackImageOnlyMarkdown(issue.title, issue.semesterLabel, imageEntries),
+    html: buildSubstackImageOnlyHtml(issue.title, issue.semesterLabel, imageEntries),
+  };
+}
+
+export async function sendIssueToSubscribersOnly(issueId: string, posters: PosterAssetInput[]) {
+  const content = await buildIssuePublicationContent(issueId, posters);
+  const fallback = await sendIssueToStudentSubscribers(content);
+
+  return {
+    ok: fallback.sent > 0 && fallback.failed === 0,
+    published: false,
+    skipped: fallback.skipped,
+    reason: fallback.reason,
+    subscriberFallbackCount: fallback.sent,
+    markdownPreview: content.markdown,
+  } satisfies PublishIssueResult;
+}
+
+export async function publishIssueToSubstack(issueId: string, posters: PosterAssetInput[]) {
+  const content = await buildIssuePublicationContent(issueId, posters);
 
   if (!flags.hasSubstackConfig) {
-    const fallback = await sendIssueToStudentSubscribers(issue.title, markdown);
+    const fallback = await sendIssueToStudentSubscribers(content);
+
+    const reason = fallback.reason
+      ? `SUBSTACK_PUBLICATION_ENDPOINT is not configured; ${fallback.reason}`
+      : "SUBSTACK_PUBLICATION_ENDPOINT is not configured";
 
     return {
       ok: fallback.sent > 0,
       published: false,
       skipped: true,
-      reason: "SUBSTACK_PUBLICATION_ENDPOINT is not configured",
+      reason,
       subscriberFallbackCount: fallback.sent,
-      markdownPreview: markdown,
+      markdownPreview: content.markdown,
     } satisfies PublishIssueResult;
   }
 
   const payload: SubstackPostPayload = {
-    title: issue.title,
-    markdown,
-    html: issue.generatedHtml,
-    issueId: issue.id,
-    semesterLabel: issue.semesterLabel,
+    title: content.issue.title,
+    markdown: content.markdown,
+    html: content.html,
+    issueId: content.issue.id,
+    semesterLabel: content.issue.semesterLabel,
     publish: true,
     send_email: true,
     author_id: env.SUBSTACK_AUTHOR_ID === "__PLACEHOLDER__" ? undefined : env.SUBSTACK_AUTHOR_ID,
@@ -172,6 +296,15 @@ export async function publishIssueToSubstack(issueId: string, posters: PosterAss
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
+
+  const rawAuthCookie =
+    env.SUBSTACK_AUTH_COOKIE && env.SUBSTACK_AUTH_COOKIE !== "__PLACEHOLDER__"
+      ? env.SUBSTACK_AUTH_COOKIE.trim()
+      : "";
+
+  if (rawAuthCookie) {
+    headers.Cookie = rawAuthCookie.includes("=") ? rawAuthCookie : `connect.sid=${rawAuthCookie}`;
+  }
 
   if (env.SUBSTACK_API_TOKEN && env.SUBSTACK_API_TOKEN !== "__PLACEHOLDER__") {
     headers.Authorization = `Bearer ${env.SUBSTACK_API_TOKEN}`;
@@ -193,12 +326,12 @@ export async function publishIssueToSubstack(issueId: string, posters: PosterAss
       published: false,
       substackStatus: response.status,
       reason: "Substack publish failed",
-      markdownPreview: markdown,
+      markdownPreview: content.markdown,
     } satisfies PublishIssueResult;
   }
 
   await prisma.publicationIssue.update({
-    where: { id: issue.id },
+    where: { id: content.issue.id },
     data: { issueStatus: "published" },
   });
 
@@ -206,6 +339,6 @@ export async function publishIssueToSubstack(issueId: string, posters: PosterAss
     ok: true,
     published: true,
     substackStatus: response.status,
-    markdownPreview: markdown,
+    markdownPreview: content.markdown,
   } satisfies PublishIssueResult;
 }

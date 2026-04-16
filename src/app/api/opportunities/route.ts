@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
       recruitingUndergrads: item.recruitingUndergrads,
       researchArea: item.researchArea,
       summaryText: item.summaryText,
+      qualifications: item.desiredSkills,
       websiteUrl: item.websiteUrl,
       status: item.status,
       updatedAt: item.lastVerifiedAt,

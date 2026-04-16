@@ -354,11 +354,6 @@ export function mapQualtricsToNormalized(payload: QualtricsPayload): NormalizedS
         ),
     ) ?? pickEmailByPattern(values) ?? pickAnyEmail(values);
 
-  const department =
-    pickFirstString(values, ["department", "dept", "QID3_TEXT", "QID3"]) ??
-    pickByQuestionLabels(values, labels, [["department"], ["school"], ["program"]]) ??
-    pickByKeyPattern(values, [["department"], ["school"], ["program"]]);
-
   const websiteUrl = normalizeWebsiteUrl(
     pickFirstString(values, ["website_url", "websiteUrl", "QID4_TEXT", "QID4"]) ??
       pickByQuestionLabels(values, labels, [["website"], ["url"], ["link"]]) ??
@@ -415,7 +410,6 @@ export function mapQualtricsToNormalized(payload: QualtricsPayload): NormalizedS
     labName: labName ?? "",
     facultyName: facultyName ?? "",
     facultyEmail,
-    department: department ?? "Unknown Department",
     researchArea,
     recruitingUndergrads: normalizeBoolean(recruitingValue),
     websiteUrl,

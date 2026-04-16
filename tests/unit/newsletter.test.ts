@@ -7,7 +7,6 @@ describe("newsletter renderer", () => {
       {
         labName: "Lab A",
         shortSummary: "Summary",
-        department: "CS",
         recruitingUndergrads: true,
         updatedAt: "2026-03-01",
       },

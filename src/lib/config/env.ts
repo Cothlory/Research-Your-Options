@@ -24,6 +24,7 @@ const EnvSchema = z.object({
   GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: z.string().default("__PLACEHOLDER__"),
   SUBSTACK_PUBLICATION_ENDPOINT: z.string().default("__PLACEHOLDER__"),
   SUBSTACK_API_TOKEN: z.string().default("__PLACEHOLDER__"),
+  SUBSTACK_AUTH_COOKIE: z.string().default("__PLACEHOLDER__"),
   SUBSTACK_AUTHOR_ID: z.string().default("__PLACEHOLDER__"),
   SMTP_HOST: z.string().default("__PLACEHOLDER__"),
   SMTP_PORT: z.string().default("587"),

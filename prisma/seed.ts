@@ -19,7 +19,6 @@ async function main() {
       labName: "Computational Materials Lab",
       facultyName: "Dr. Elena Morris",
       facultyEmail: "emorris@virginia.edu",
-      department: "Materials Science and Engineering",
       websiteUrl: "https://engineering.virginia.edu",
       currentStatus: "approved",
     },
@@ -35,7 +34,6 @@ async function main() {
       labName: "Human-Centered Robotics Group",
       facultyName: "Dr. Nikhil Patel",
       facultyEmail: "npatel@virginia.edu",
-      department: "Computer Science",
       websiteUrl: "https://engineering.virginia.edu",
       currentStatus: "approved",
     },
@@ -85,7 +83,6 @@ async function main() {
       labName: lab1.labName,
       shortSummary:
         "Computational materials projects with approachable onboarding for undergraduate contributors.",
-      department: lab1.department,
       recruitingUndergrads: true,
       websiteUrl: lab1.websiteUrl ?? undefined,
       updatedAt: "2026-03-01",
@@ -94,7 +91,6 @@ async function main() {
       labName: lab2.labName,
       shortSummary:
         "Human-centered robotics opportunities focused on assistive technology and interaction design.",
-      department: lab2.department,
       recruitingUndergrads: true,
       websiteUrl: lab2.websiteUrl ?? undefined,
       updatedAt: "2026-02-15",

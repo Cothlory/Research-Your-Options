@@ -166,7 +166,7 @@ A key product rule: each published entry must show a visible `last updated` time
 #### Student experience
 - students must be able to:
   - browse/search/filter labs
-  - view department, recruiting status, website, summary, and last updated timestamp
+  - view recruiting status, website, summary, and last updated timestamp
   - sign up for newsletter updates
 
 #### Lifecycle and staleness
@@ -197,7 +197,6 @@ Suggested fields:
 - `labName`
 - `facultyName`
 - `facultyEmail`
-- `department`
 - `websiteUrl`
 - `currentStatus`
 - `createdAt`
@@ -336,7 +335,6 @@ The initial survey input should support these fields:
 - `lab_name`
 - `faculty_name`
 - `faculty_email`
-- `department`
 - `research_area`
 - `recruiting_undergrads`
 - `website_url`
@@ -467,7 +465,7 @@ Admin actions that must be logged:
 ## 16. Student Workflow
 1. visit homepage
 2. browse or search research opportunities
-3. filter by department and recruiting status
+3. filter by recruiting status
 4. open lab details / external website
 5. view visible last-updated date
 6. sign up for newsletter

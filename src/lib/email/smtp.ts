@@ -4,11 +4,20 @@ import nodemailer from "nodemailer";
 import { env, flags } from "@/lib/config/env";
 import { logger } from "@/lib/logger";
 
+export interface EmailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
+  cid?: string;
+  disposition?: "inline" | "attachment";
+}
+
 export interface EmailMessage {
   to: string;
   subject: string;
   text: string;
   html?: string;
+  attachments?: EmailAttachment[];
 }
 
 export interface BulkEmailResult {
@@ -63,6 +72,7 @@ export async function sendBulkEmail(messages: EmailMessage[]): Promise<BulkEmail
         subject: message.subject,
         text: message.text,
         html: message.html,
+        attachments: message.attachments,
       });
       delivered.push(message.to);
     } catch (error) {

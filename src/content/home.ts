@@ -7,7 +7,7 @@ export const homeHero = {
 };
 
 export const homeBullets = [
-  "Search labs by department and topic",
+  "Search labs by topic and research focus",
   "See clear recruiting status and last-updated date",
   "Subscribe for newsletter-ready opportunity digests",
 ];
