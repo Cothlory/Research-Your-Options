@@ -1,6 +1,6 @@
 # Project Overview
 
-Research Starters Hub is an MVP system to centralize undergraduate research opportunity discovery.
+Research Your Options is an MVP system to centralize undergraduate research opportunity discovery.
 
 Key workflow:
 1. Faculty submit updates through Qualtrics.

@@ -67,7 +67,7 @@ function buildInvitationMessage(
   const deadline = new Date();
   deadline.setUTCDate(deadline.getUTCDate() + graceDays);
 
-  const subject = `[Research Starters Hub] Semester Lab Update Survey (${campaignDateLabel})`;
+  const subject = `[Research Your Options] Semester Lab Update Survey (${campaignDateLabel})`;
   const text = [
     "Hello,",
     "",

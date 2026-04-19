@@ -13,6 +13,26 @@ const faqs = [
     q: "What if a summary looks inaccurate?",
     a: "All summaries are reviewable by admins, and manual edits can override generated text.",
   },
+  {
+    q: "Who can use this platform?",
+    a: "Any UVA undergraduate can browse opportunities. The content is especially designed to help first- and second-year students who are exploring research for the first time.",
+  },
+  {
+    q: "Why are some labs not listed yet?",
+    a: "A lab appears when there is an approved latest snapshot. If no new survey response arrives, the previous approved entry remains; if none has ever been approved, the lab will not appear.",
+  },
+  {
+    q: "Should I email a lab even if I feel underqualified?",
+    a: "Yes. Many labs value curiosity and commitment as much as prior experience. Use the listed requirements to tailor a concise, specific message showing why you are interested.",
+  },
+  {
+    q: "How can I receive updates automatically?",
+    a: "Use the newsletter signup on the home page. You can unsubscribe later through the standard email unsubscribe flow if your team enables it.",
+  },
+  {
+    q: "Can faculty or admins fix mistakes quickly?",
+    a: "Yes. Admins can edit summaries and republish issue content, and faculty can submit updated survey responses in the next outreach cycle.",
+  },
 ];
 
 export default function FaqPage() {
@@ -27,7 +47,6 @@ export default function FaqPage() {
           </article>
         ))}
       </div>
-      <p className="mt-6 text-sm text-slate-600">TODO(owner=teammate): Add 4-6 more FAQs from user interviews.</p>
     </section>
   );
 }

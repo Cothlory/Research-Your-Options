@@ -78,7 +78,7 @@ async function main() {
     ],
   });
 
-  const issue = renderNewsletterIssue("Research Starters Hub Demo", semesterLabel, [
+  const issue = renderNewsletterIssue("Research Your Options Demo", semesterLabel, [
     {
       labName: lab1.labName,
       shortSummary:
@@ -99,7 +99,7 @@ async function main() {
 
   await prisma.publicationIssue.create({
     data: {
-      title: "Research Starters Hub Demo",
+      title: "Research Your Options Demo",
       semesterLabel,
       issueStatus: "exported",
       generatedHtml: issue.html,

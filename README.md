@@ -1,6 +1,6 @@
-# Research Starters Hub MVP
+# Research Your Options MVP
 
-Research Starters Hub ingests faculty/lab recruiting information from Qualtrics, enriches and summarizes it, then exposes reviewed opportunities to students via listing pages and newsletter exports.
+Research Your Options ingests faculty/lab recruiting information from Qualtrics, enriches and summarizes it, then exposes reviewed opportunities to students via listing pages and newsletter exports.
 
 Source-of-truth specification: [docs/project-spec.md](docs/project-spec.md)
 

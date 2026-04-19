@@ -17,7 +17,7 @@ const monoFont = Source_Code_Pro({
 });
 
 export const metadata: Metadata = {
-  title: "Research Starters Hub",
+  title: "Research Your Options",
   description: "Undergraduate research opportunities at UVA",
 };
 

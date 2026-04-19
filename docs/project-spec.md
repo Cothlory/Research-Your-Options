@@ -1,8 +1,8 @@
-# Research Starters Hub — Technical Specification
+# Research Your Options — Technical Specification
 
 ## 1. Overview
 
-Research Starters Hub is a web-based system for improving undergraduate access to research opportunities at UVA. The system collects faculty/lab recruitment information through a Qualtrics XM survey, processes and stores the data, optionally enriches it using public lab website content and LLM summarization, and generates a student-facing newsletter and searchable listing page.
+Research Your Options is a web-based system for improving undergraduate access to research opportunities at UVA. The system collects faculty/lab recruitment information through a Qualtrics XM survey, processes and stores the data, optionally enriches it using public lab website content and LLM summarization, and generates a student-facing newsletter and searchable listing page.
 
 This project exists because current undergraduate research discovery is fragmented, opaque, and highly dependent on confidence, prior exposure, and informal networks. The system is intended to reduce those barriers while keeping faculty maintenance burden low. The problem framing, constraints, solution direction, and lifecycle requirements come from the course report and client/user discovery materials. :contentReference[oaicite:1]{index=1}
 

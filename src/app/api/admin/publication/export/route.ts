@@ -8,7 +8,7 @@ import { semesterLabelFromDate } from "@/lib/domain/snapshot";
 import { syncLatestSnapshotsToGoogleSheet } from "@/lib/publication/google-sheets";
 
 const ExportSchema = z.object({
-  title: z.string().min(3).default("Research Starters Hub Issue"),
+  title: z.string().min(3).default("Research Your Options Issue"),
   semesterLabel: z.string().optional(),
   syncGoogleSheet: z.boolean().default(true),
 });
