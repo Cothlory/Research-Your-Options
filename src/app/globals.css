@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  --background: #fefce8;
+  --background: #fff8e6fe;
   --foreground: #0f172a;
   --card: #ffffff;
 }
@@ -18,4 +18,5 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-space-grotesk), ui-sans-serif, sans-serif;
+  header: var(--background);
 }

@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "@/components/core/Providers";
 import { NavBar } from "@/components/core/NavBar";
 import { Footer } from "@/components/core/Footer";
+import { SiteBanner } from "@/components/core/SiteBanner";
 
 const bodyFont = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -30,11 +31,11 @@ export default function RootLayout({
       lang="en"
       className={`${bodyFont.variable} ${monoFont.variable} h-full antialiased`}
     >
-      <body className="min-h-full bg-amber-50/60 text-slate-900">
+      <body className="min-h-full bg-white text-slate-900">
         <Providers>
           <div className="relative flex min-h-screen flex-col">
-            <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72 bg-[radial-gradient(circle_at_20%_20%,rgba(251,191,36,0.35),transparent_42%),radial-gradient(circle_at_80%_5%,rgba(14,165,233,0.22),transparent_38%)]" />
             <NavBar />
+            <SiteBanner />
             <main className="flex-1">{children}</main>
             <Footer />
           </div>

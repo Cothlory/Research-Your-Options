@@ -4,7 +4,7 @@ import Link from "next/link";
 
 export function NavBar() {
   return (
-    <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
+    <header className="border-b border-slate-200 bg-[var(--background)]">
       <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         <Link href="/" className="text-sm font-extrabold tracking-wide text-slate-900">
           Research Starters Hub
