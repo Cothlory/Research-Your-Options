@@ -52,9 +52,17 @@ export interface BatchImportResult {
 
 function buildHeaders() {
   return {
-    "X-API-TOKEN": env.QUALTRICS_API_TOKEN,
+    "X-API-TOKEN": env.QUALTRICS_API_TOKEN.trim(),
     "Content-Type": "application/json",
   };
+}
+
+function getQualtricsApiBaseUrl(): string {
+  return env.QUALTRICS_API_BASE_URL.trim().replace(/\/$/, "");
+}
+
+function getQualtricsSurveyId(): string {
+  return env.QUALTRICS_SURVEY_ID.trim();
 }
 
 function isZipBuffer(buffer: Buffer): boolean {
@@ -193,8 +201,9 @@ async function extractRecordsFromExportBuffer(
 }
 
 async function startExport(startDate: Date, endDate: Date, timezone?: string): Promise<string> {
-  const apiBase = env.QUALTRICS_API_BASE_URL.replace(/\/$/, "");
-  const url = `${apiBase}/surveys/${env.QUALTRICS_SURVEY_ID}/export-responses`;
+  const apiBase = getQualtricsApiBaseUrl();
+  const surveyId = getQualtricsSurveyId();
+  const url = `${apiBase}/surveys/${surveyId}/export-responses`;
 
   const response = await fetch(url, {
     method: "POST",
@@ -224,10 +233,11 @@ async function startExport(startDate: Date, endDate: Date, timezone?: string): P
 }
 
 async function pollExport(progressId: string): Promise<string> {
-  const apiBase = env.QUALTRICS_API_BASE_URL.replace(/\/$/, "");
+  const apiBase = getQualtricsApiBaseUrl();
+  const surveyId = getQualtricsSurveyId();
 
   for (let attempt = 0; attempt < 120; attempt += 1) {
-    const url = `${apiBase}/surveys/${env.QUALTRICS_SURVEY_ID}/export-responses/${progressId}`;
+    const url = `${apiBase}/surveys/${surveyId}/export-responses/${progressId}`;
     const response = await fetch(url, {
       method: "GET",
       headers: buildHeaders(),
@@ -258,13 +268,14 @@ async function pollExport(progressId: string): Promise<string> {
 }
 
 async function downloadExport(fileId: string): Promise<Array<Record<string, unknown>>> {
-  const apiBase = env.QUALTRICS_API_BASE_URL.replace(/\/$/, "");
-  const url = `${apiBase}/surveys/${env.QUALTRICS_SURVEY_ID}/export-responses/${fileId}/file`;
+  const apiBase = getQualtricsApiBaseUrl();
+  const surveyId = getQualtricsSurveyId();
+  const url = `${apiBase}/surveys/${surveyId}/export-responses/${fileId}/file`;
 
   const response = await fetch(url, {
     method: "GET",
     headers: {
-      "X-API-TOKEN": env.QUALTRICS_API_TOKEN,
+      "X-API-TOKEN": env.QUALTRICS_API_TOKEN.trim(),
     },
     cache: "no-store",
   });

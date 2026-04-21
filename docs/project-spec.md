@@ -644,15 +644,75 @@ The MVP is acceptable if all of the following work:
 - the listing shows recruiting status and last updated timestamp
 - a newsletter issue export can be generated from approved entries
 - the project runs locally with mock integrations only
-## 24. Open Questions / Future Extensions
-- how faculty contact lists will be sourced and maintained
-- whether newsletter signup is open or restricted to UVA addresses
-- whether lab ambassadors can submit on behalf of faculty
+## 24. Future Work and Expansion Roadmap
+
+### 24.1 Phase 1: SEAS implementation and adoption
+
+Objectives:
+- implement stable semester-cycle operations for School of Engineering and Applied Science (SEAS)
+- increase awareness and usage among SEAS undergraduates
+
+Execution priorities:
+- launch targeted outreach through SEAS channels (advising newsletters, departmental mailing lists, student organizations, and intro-level course announcements)
+- publish a student onboarding guide for first outreach (including cold-email examples and mentor contact etiquette)
+- establish a recurring faculty contact verification process each semester
+
+Suggested KPIs:
+- unique student visitors from SEAS
+- newsletter sign-up conversion rate
+- click-through rate from listing page to lab websites
+- faculty response rate per campaign wave
+
+### 24.2 Phase 2: expansion beyond SEAS to other UVA schools
+
+Objectives:
+- extend the platform from SEAS to additional UVA schools (for example Arts and Sciences, Nursing, and Education)
+- preserve data quality while scaling operational ownership
+
+Execution priorities:
+- add school-level taxonomy and filtering to support discipline-specific discovery
+- onboard school-specific admin reviewers and publication workflows
+- define cross-school governance for review SLAs, stale-entry policy, and publication standards
+
+Suggested KPIs:
+- number of active schools onboarded
+- number of approved opportunities per school
+- median review turnaround time per school
+
+### 24.3 Product and infrastructure maturation
+
+- introduce UVA SSO and role-based access control
+- add school-aware analytics dashboards for adoption and quality monitoring
+- evaluate controlled personalization (major/year/interest tags) while preserving transparency
+- harden publication operations (delivery monitoring, failure alerts, and audit exports)
+
+### 24.4 Open product decisions
+
+- whether newsletter signup remains open or is restricted to UVA addresses
+- whether lab ambassadors can submit updates on behalf of faculty
 - whether archived/stale entries should remain searchable
-- whether student personalization should be added later
-- whether the searchable listing and newsletter should share one publication pipeline or two separate view models
+- whether listing and newsletter should continue sharing one publication pipeline or diverge into separate view models
 ## 25. Engineering Principle for This Project
 
 Automate repetitive collection and formatting work, but keep a review boundary before publication.
 
 This principle is necessary because the system must reduce manual burden while avoiding low-quality or misleading output at scale. It is also explicitly aligned with the report’s proposed compromise between automation and reliability.
+
+## 26. AI Summarization Reliability Controls and Reference
+
+The summarization pipeline is intentionally constrained to reduce distortion risk and limit hallucination:
+
+- input grounding: prompt context is bounded to normalized survey fields plus website text excerpts
+- strict prompting: instructions require evidence-backed details and explicitly constrain output format/content
+- schema-constrained generation: the model must return strict JSON schema output
+- runtime validation: outputs are parsed and validated before acceptance
+- deterministic post-processing: final summary is normalized into a fixed template for consistency
+- human review boundary: admin review is required before publication
+
+Implementation references in this repository:
+- `src/lib/llm/openai-provider.ts` (strict prompt, JSON schema response_format, validation, fallback)
+- `src/lib/validation/qualtrics.ts` (input validation before summarization)
+- `src/lib/services/review-service.ts` and admin review routes (human approval before publish)
+
+External reference:
+- OpenAI, "Introducing Structured Outputs in the API" (2024): schema-constrained generation for reliable structured responses.

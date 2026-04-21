@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { SummaryResult } from "@/lib/types/domain";
 import type { SummarizerProvider, SummaryInput } from "@/lib/llm/provider";
 import { env } from "@/lib/config/env";
+import { formatRequirementBullets } from "@/lib/domain/requirements";
 import { logger } from "@/lib/logger";
 
 const StructuredSummarySchema = z.object({
@@ -31,7 +32,12 @@ function trimToWords(text: string, maxWords: number): string {
 }
 
 function toBulletLines(items: string[]): string {
-  return items.slice(0, 3).map((item) => `- ${item.trim()}`).join("\n");
+  const formatted = formatRequirementBullets(items.join("\n"), {
+    maxItems: 3,
+    maxWordsPerItem: 18,
+  });
+
+  return formatted ?? "- Basic interest in the topic\n- Willingness to learn\n- Consistent communication";
 }
 
 function normalizePhrase(text?: string | null): string {

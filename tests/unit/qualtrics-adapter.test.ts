@@ -70,4 +70,18 @@ describe("qualtrics adapter", () => {
 
     expect(mapped.desiredSkills).toBe("Python\nLinear algebra\nExperience with transformers");
   });
+
+  it("ignores numeric-only qualification codes", () => {
+    const payload = {
+      values: {
+        QID8_TEXT: "Systems Lab",
+        QID5_TEXT: "8999999761581421",
+      },
+    };
+
+    const mapped = mapQualtricsToNormalized(payload);
+
+    expect(mapped.desiredSkills).toBeUndefined();
+    expect(mapped.optionalNotes).toBeUndefined();
+  });
 });

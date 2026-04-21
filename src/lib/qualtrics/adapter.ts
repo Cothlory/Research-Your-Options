@@ -251,6 +251,12 @@ function sanitizeSurveyTextValue(value?: string): string | undefined {
     return undefined;
   }
 
+  const numericCharacters = trimmed.replace(/\D+/g, "").length;
+  const hasLetters = /[a-z]/i.test(trimmed);
+  if (!hasLetters && numericCharacters >= 8) {
+    return undefined;
+  }
+
   const normalized = trimmed.toLowerCase();
   if (
     normalized === "0" ||

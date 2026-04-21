@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ImageResponse } from "next/og";
 import { createElement } from "react";
 import { prisma } from "@/lib/db/client";
+import { extractRequirementBullets } from "@/lib/domain/requirements";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,17 +22,10 @@ function trimText(value: string, maxLength: number): string {
 }
 
 function extractRequirements(value?: string | null): string[] {
-  if (!value?.trim()) {
-    return ["Not specified"];
-  }
-
-  const items = value
-    .replace(/\r\n/g, "\n")
-    .split(/\n|;/)
-    .map((line) => line.replace(/^[-*\s]+/, "").replace(/^\d+[.)]\s*/, "").trim())
-    .filter(Boolean)
-    .slice(0, 3)
-    .map((line) => trimText(line, 84));
+  const items = extractRequirementBullets(value, {
+    maxItems: 3,
+    maxWordsPerItem: 18,
+  });
 
   return items.length > 0 ? items : ["Not specified"];
 }

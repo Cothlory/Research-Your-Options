@@ -29,13 +29,6 @@ const summaryClampStyle: CSSProperties = {
   overflow: "hidden",
 };
 
-const requirementClampStyle: CSSProperties = {
-  display: "-webkit-box",
-  WebkitBoxOrient: "vertical",
-  WebkitLineClamp: 1,
-  overflow: "hidden",
-};
-
 function extractRequirements(value?: string | null): string[] {
   if (!value?.trim()) {
     return ["Not specified"];
@@ -91,7 +84,10 @@ export function LabCard({ lab }: { lab: LabCardModel }) {
           </div>
           <ul className="mt-3 space-y-1 text-lg leading-tight" style={{ color: UVA_ORANGE }}>
             {requirements.map((item, index) => (
-              <li key={`${lab.id}-req-${index}`} className="pl-4" style={requirementClampStyle}>
+              <li
+                key={`${lab.id}-req-${index}`}
+                className="break-words whitespace-normal pl-4 leading-snug"
+              >
                 • {item}
               </li>
             ))}

@@ -9,6 +9,7 @@ import { fetchAndParseWebsiteText } from "@/lib/scraping/fetch-and-parse";
 import { getSummarizerProvider } from "@/lib/llm/service";
 import { evaluateFieldUpdatesWithLlm } from "@/lib/llm/update-evaluator";
 import { semesterLabelFromDate } from "@/lib/domain/snapshot";
+import { formatRequirementBullets } from "@/lib/domain/requirements";
 import { recordSurveyResponseForFacultyEmail } from "@/lib/services/campaign-service";
 import { syncFacultyRowsToGoogleSheet } from "@/lib/publication/google-sheets";
 
@@ -51,50 +52,10 @@ function trimWords(text: string, maxWords: number): string {
 }
 
 function formatSurveyQualifications(value?: string | null): string | null {
-  if (!value?.trim()) {
-    return null;
-  }
-
-  const normalized = value
-    .replace(/\r\n/g, "\n")
-    .replace(/[•●▪]/g, "\n")
-    .trim();
-
-  const rawLines = normalized
-    .split(/\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const lines =
-    rawLines.length === 1 && rawLines[0].includes(";")
-      ? rawLines[0].split(";").map((segment) => segment.trim()).filter(Boolean)
-      : rawLines;
-
-  const bullets = lines
-    .map((line) => line.replace(/^[-*\s]+/, "").replace(/^\d+[.)]\s*/, "").trim())
-    .filter((line) => {
-      const normalized = line.toLowerCase();
-      return !(
-        normalized === "0" ||
-        normalized === "1" ||
-        normalized === "yes" ||
-        normalized === "no" ||
-        normalized === "true" ||
-        normalized === "false" ||
-        normalized === "n/a" ||
-        normalized === "na" ||
-        normalized === "none" ||
-        normalized === "null"
-      );
-    })
-    .filter(Boolean)
-    .map((line) => `- ${line}`);
-
-  if (bullets.length === 0) {
-    return null;
-  }
-
-  return bullets.join("\n");
+  return formatRequirementBullets(value, {
+    maxItems: 3,
+    maxWordsPerItem: 18,
+  });
 }
 
 function chooseUpdatedString(

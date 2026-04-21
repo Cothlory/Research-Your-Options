@@ -50,7 +50,8 @@ function parsePositiveInt(raw: string, fallback: number): number {
 }
 
 function isConfigured(value: string): boolean {
-  return Boolean(value && value !== "__PLACEHOLDER__");
+  const normalized = value.trim();
+  return Boolean(normalized && normalized !== "__PLACEHOLDER__");
 }
 
 export const flags = {
