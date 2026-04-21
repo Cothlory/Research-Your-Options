@@ -47,7 +47,9 @@ export async function POST(req: NextRequest) {
     endDate,
   });
 
+  const isSuccessful = result.ok || result.skipped || result.partial;
+
   return NextResponse.json(result, {
-    status: result.ok || result.skipped ? 200 : 500,
+    status: isSuccessful ? 200 : 500,
   });
 }

@@ -31,6 +31,7 @@ export interface BatchImportOptions {
 export interface BatchImportResult {
   ok: boolean;
   skipped?: boolean;
+  partial?: boolean;
   reason?: string;
   mode: "mock" | "qualtrics-export";
   startDate: string;
@@ -427,8 +428,11 @@ export async function importQualtricsResponsesBatch(
         ? await syncFacultyRowsToGoogleSheet([...facultyEmailsToSync])
         : undefined;
 
+    const partial = failed > 0 && (imported > 0 || duplicates > 0 || filteredOut > 0);
+
     return {
       ok: failed === 0,
+      partial,
       mode: "qualtrics-export",
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
@@ -442,6 +446,11 @@ export async function importQualtricsResponsesBatch(
       googleSheetSync,
     };
   } catch (error) {
+    const reason =
+      error instanceof Error && error.message
+        ? error.message
+        : "Qualtrics batch import failed";
+
     logger.error("Qualtrics batch import failed", {
       error,
       waveId: options?.waveId,
@@ -451,7 +460,7 @@ export async function importQualtricsResponsesBatch(
 
     return {
       ok: false,
-      reason: "Qualtrics batch import failed",
+      reason,
       mode: "qualtrics-export",
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),

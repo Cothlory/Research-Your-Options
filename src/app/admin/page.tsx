@@ -58,6 +58,18 @@ type ManualIssueEmailResponse = {
   issueId: string;
 };
 
+type ManualCollectResponse = {
+  ok: boolean;
+  skipped?: boolean;
+  partial?: boolean;
+  reason?: string;
+  exported: number;
+  imported: number;
+  duplicates: number;
+  filteredOut: number;
+  failed: number;
+};
+
 async function getAdminSession(): Promise<SessionResponse> {
   const res = await fetch("/api/admin/auth/session", { cache: "no-store" });
   if (!res.ok) {
@@ -215,16 +227,26 @@ async function sendManualSurvey(emails: string[]): Promise<void> {
   }
 }
 
-async function collectManualSurvey(): Promise<void> {
+async function collectManualSurvey(): Promise<ManualCollectResponse> {
   const res = await fetch("/api/admin/survey/collect", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({}),
   });
 
-  if (!res.ok) {
+  const payload = (await res.json().catch(() => null)) as ManualCollectResponse | null;
+
+  if (!payload) {
     throw new Error("Failed to collect survey responses.");
   }
+
+  const treatAsSuccess = payload.ok || payload.skipped || payload.partial;
+
+  if (!res.ok || !treatAsSuccess) {
+    throw new Error(payload.reason ?? "Failed to collect survey responses.");
+  }
+
+  return payload;
 }
 
 async function sendManualPublicationEmail(issueId?: string): Promise<ManualIssueEmailResponse> {
@@ -471,9 +493,23 @@ export default function AdminPage() {
           <button
             onClick={async () => {
               setActionError(null);
+              setActionNotice(null);
               setActionBusyId("manual-collect");
               try {
-                await collectManualSurvey();
+                const result = await collectManualSurvey();
+
+                if (result.skipped) {
+                  setActionNotice(`Collect skipped: ${result.reason ?? "No work performed."}`);
+                } else if (result.partial) {
+                  setActionNotice(
+                    `Collect finished with warnings. Imported ${result.imported}, duplicates ${result.duplicates}, filtered ${result.filteredOut}, failed ${result.failed}.`,
+                  );
+                } else {
+                  setActionNotice(
+                    `Collect complete. Imported ${result.imported}, duplicates ${result.duplicates}, filtered ${result.filteredOut}, failed ${result.failed}.`,
+                  );
+                }
+
                 await refreshAll();
               } catch (error) {
                 setActionError(
