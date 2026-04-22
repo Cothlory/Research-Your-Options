@@ -33,6 +33,7 @@ export interface BatchImportResult {
   skipped?: boolean;
   partial?: boolean;
   reason?: string;
+  failedReasons?: string[];
   mode: "mock" | "qualtrics-export";
   startDate: string;
   endDate: string;
@@ -87,6 +88,31 @@ function normalizeStringValue(value: unknown): string | undefined {
   }
 
   return undefined;
+}
+
+function extractFailureReasonFromResult(result: unknown): string {
+  if (result && typeof result === "object" && "errors" in result) {
+    const errors = (result as { errors?: unknown }).errors;
+    if (Array.isArray(errors) && errors.length > 0) {
+      const joined = errors
+        .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+        .join("; ");
+
+      if (joined) {
+        return joined;
+      }
+    }
+  }
+
+  return "Validation failed while ingesting survey response";
+}
+
+function extractFailureReasonFromError(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return "Unexpected ingestion error";
 }
 
 function parseDate(value: unknown): Date | undefined {
@@ -363,6 +389,7 @@ export async function importQualtricsResponsesBatch(
     let duplicates = 0;
     let filteredOut = 0;
     let failed = 0;
+    const failedReasonSet = new Set<string>();
     const facultyEmailsToSync = new Set<string>();
 
     for (const record of records) {
@@ -412,9 +439,15 @@ export async function importQualtricsResponsesBatch(
           }
         } else {
           failed += 1;
+          const reason = extractFailureReasonFromResult(result);
+          const label = responseId ? `response ${responseId}: ${reason}` : reason;
+          failedReasonSet.add(label);
         }
       } catch (error) {
         failed += 1;
+        const reason = extractFailureReasonFromError(error);
+        const label = responseId ? `response ${responseId}: ${reason}` : reason;
+        failedReasonSet.add(label);
         logger.error("Failed to ingest Qualtrics response record", {
           error,
           responseId,
@@ -429,10 +462,12 @@ export async function importQualtricsResponsesBatch(
         : undefined;
 
     const partial = failed > 0 && (imported > 0 || duplicates > 0 || filteredOut > 0);
+    const failedReasons = [...failedReasonSet].slice(0, 5);
 
     return {
       ok: failed === 0,
       partial,
+      failedReasons,
       mode: "qualtrics-export",
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),

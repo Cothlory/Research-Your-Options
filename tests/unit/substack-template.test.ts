@@ -71,9 +71,15 @@ describe("substack template helpers", () => {
 
     expect(markdown).toContain("# Issue 1");
     expect(markdown).toContain("Semester: fall-2026");
+    expect(markdown).toContain("Total opportunities: 2");
+    expect(markdown).toContain("## Issue Summary");
+    expect(markdown).toContain("This issue curates 2 approved undergraduate research opportunities");
+    expect(markdown).toContain("## Quick Index");
+    expect(markdown).toContain("1. [Lab A](#lab-lab-a-1)");
     expect(markdown).toContain("![Lab A card](https://example.edu/a.png)");
-    expect(markdown).toContain("## Lab B");
+    expect(markdown).toContain("## 2. Lab B");
     expect(markdown).toContain("_Card image unavailable_");
+    expect(markdown).toContain("[Back to top](#issue-top)");
     expect(markdown).not.toContain("Qualifications:");
   });
 
@@ -91,8 +97,13 @@ describe("substack template helpers", () => {
     expect(html).toContain("<h1");
     expect(html).toContain("Issue 2");
     expect(html).toContain("spring-2027");
+    expect(html).toContain("Total opportunities:");
+    expect(html).toContain("This issue curates 2 approved undergraduate research opportunities");
+    expect(html).toContain("Quick Index");
+    expect(html).toContain('href="#lab-lab-a-1"');
     expect(html).toContain('alt="Lab A card"');
     expect(html).toContain("https://example.edu/a.png");
     expect(html).toContain("Card image unavailable");
+    expect(html).toContain('href="#issue-top"');
   });
 });

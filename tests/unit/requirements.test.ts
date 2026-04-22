@@ -32,4 +32,10 @@ describe("requirements extraction", () => {
 
     expect(items).toEqual([]);
   });
+
+  it("filters placeholder artifacts", () => {
+    const items = extractRequirementBullets("- error\n- undefined\n- not specified");
+
+    expect(items).toEqual([]);
+  });
 });

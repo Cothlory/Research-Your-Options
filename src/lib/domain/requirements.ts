@@ -11,6 +11,12 @@ const DEFAULT_MAX_WORDS = 18;
 const INVALID_VALUES = new Set([
   "0",
   "1",
+  "error",
+  "err",
+  "unknown",
+  "undefined",
+  "not specified",
+  "not available",
   "yes",
   "no",
   "true",
@@ -94,6 +100,24 @@ function hasRequirementSignal(text: string): boolean {
   return REQUIREMENT_KEYWORDS.some((keyword) => normalized.includes(keyword));
 }
 
+function isPlaceholderArtifact(text: string): boolean {
+  const normalized = text.toLowerCase().trim();
+
+  if (INVALID_VALUES.has(normalized)) {
+    return true;
+  }
+
+  if (/^(error|err)\b[:\s-]*/i.test(normalized) && normalized.length <= 40) {
+    return true;
+  }
+
+  if (/^\(?not\s+specified\)?$/i.test(normalized)) {
+    return true;
+  }
+
+  return false;
+}
+
 interface CandidateLine {
   text: string;
   explicitBullet: boolean;
@@ -138,7 +162,7 @@ export function extractRequirementBullets(
     .map(cleanCandidate)
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter(Boolean)
-    .filter((line) => !INVALID_VALUES.has(line.toLowerCase()))
+    .filter((line) => !isPlaceholderArtifact(line))
     .filter((line) => !isNumericArtifact(line));
 
   const filtered =

@@ -283,8 +283,7 @@ export async function ingestSurveySubmission({
   const summaryText = trimWords(summary.structured?.summary ?? summary.outputText, 70);
   const surveyQualifications = formatSurveyQualifications(normalizedPayload.desiredSkills);
   const surveyFallbackQualifications = formatSurveyQualifications(normalizedPayload.optionalNotes);
-  const proposedQualifications =
-    surveyQualifications ?? surveyFallbackQualifications ?? "- Not specified";
+  const proposedQualifications = surveyQualifications ?? surveyFallbackQualifications ?? null;
 
   const baseline = {
     labName: latestApprovedSnapshot ? lab.labName : undefined,

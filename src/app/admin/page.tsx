@@ -63,6 +63,7 @@ type ManualCollectResponse = {
   skipped?: boolean;
   partial?: boolean;
   reason?: string;
+  failedReasons?: string[];
   exported: number;
   imported: number;
   duplicates: number;
@@ -243,7 +244,12 @@ async function collectManualSurvey(): Promise<ManualCollectResponse> {
   const treatAsSuccess = payload.ok || payload.skipped || payload.partial;
 
   if (!res.ok || !treatAsSuccess) {
-    throw new Error(payload.reason ?? "Failed to collect survey responses.");
+    const reasonDetails =
+      payload.failedReasons && payload.failedReasons.length > 0
+        ? ` Details: ${payload.failedReasons.join(" | ")}`
+        : "";
+
+    throw new Error((payload.reason ?? "Failed to collect survey responses.") + reasonDetails);
   }
 
   return payload;
@@ -501,8 +507,13 @@ export default function AdminPage() {
                 if (result.skipped) {
                   setActionNotice(`Collect skipped: ${result.reason ?? "No work performed."}`);
                 } else if (result.partial) {
+                  const reasonDetails =
+                    result.failedReasons && result.failedReasons.length > 0
+                      ? ` Failed reasons: ${result.failedReasons.join(" | ")}`
+                      : "";
+
                   setActionNotice(
-                    `Collect finished with warnings. Imported ${result.imported}, duplicates ${result.duplicates}, filtered ${result.filteredOut}, failed ${result.failed}.`,
+                    `Collect finished with warnings. Imported ${result.imported}, duplicates ${result.duplicates}, filtered ${result.filteredOut}, failed ${result.failed}.${reasonDetails}`,
                   );
                 } else {
                   setActionNotice(
