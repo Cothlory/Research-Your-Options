@@ -48,7 +48,7 @@ export function LabCard({ lab }: { lab: LabCardModel }) {
   const updated = format(new Date(lab.updatedAt), "MMM d, yyyy");
   const requirements = extractRequirements(lab.qualifications);
   const summary = lab.summaryText?.trim() || "Summary pending review.";
-  const linkLabel = lab.websiteUrl ? "Lab Link" : "Link unavailable";
+  const linkLabel = lab.websiteUrl ? `Visit ${lab.labName} website` : "Link unavailable";
 
   return (
     <article
@@ -57,9 +57,9 @@ export function LabCard({ lab }: { lab: LabCardModel }) {
     >
       <div className="grid h-full grid-rows-[minmax(0,1fr)_minmax(0,0.9fr)_auto] gap-5">
         <section className="min-h-0 pr-10">
-          <h3 className="max-w-[95%] text-3xl font-black uppercase leading-[0.95] tracking-wide sm:text-4xl">
+          <h2 className="max-w-[95%] text-3xl font-black uppercase leading-[0.95] tracking-wide sm:text-4xl">
             {lab.labName}
-          </h3>
+          </h2>
           <p className="mt-4 text-[1.02rem] leading-snug text-white/92" style={summaryClampStyle}>
             {summary}
           </p>
@@ -133,7 +133,7 @@ export function LabCard({ lab }: { lab: LabCardModel }) {
         {lab.recruitingUndergrads ? "Recruiting" : "Not Recruiting"}
       </div>
 
-      <p className="absolute bottom-3 right-4 text-[0.67rem] font-medium uppercase tracking-wide text-white/75">
+      <p className="absolute bottom-3 right-4 text-xs font-semibold uppercase tracking-wide text-white/90">
         Updated {updated}
       </p>
     </article>

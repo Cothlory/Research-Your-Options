@@ -20,6 +20,8 @@ async function fetchLabs(): Promise<LabCardModel[]> {
 export default function OpportunitiesPage() {
   const [search, setSearch] = useState("");
   const [recruiting, setRecruiting] = useState("all");
+  const searchInputId = "opportunities-search";
+  const recruitingSelectId = "opportunities-recruiting";
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["opportunities"],
@@ -48,21 +50,30 @@ export default function OpportunitiesPage() {
       </p>
 
       <div className="mt-6 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-2">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search lab name or topic"
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        />
-        <select
-          value={recruiting}
-          onChange={(e) => setRecruiting(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        >
-          <option value="all">all</option>
-          <option value="true">recruiting</option>
-          <option value="false">not recruiting</option>
-        </select>
+        <label htmlFor={searchInputId} className="text-sm font-semibold text-slate-800">
+          Search by lab name or topic
+          <input
+            id={searchInputId}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="e.g., neuroscience, materials"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-600"
+          />
+        </label>
+
+        <label htmlFor={recruitingSelectId} className="text-sm font-semibold text-slate-800">
+          Recruiting status
+          <select
+            id={recruitingSelectId}
+            value={recruiting}
+            onChange={(e) => setRecruiting(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+          >
+            <option value="all">All</option>
+            <option value="true">Recruiting</option>
+            <option value="false">Not recruiting</option>
+          </select>
+        </label>
       </div>
 
       <div className="mt-6 grid gap-6 md:grid-cols-2">
