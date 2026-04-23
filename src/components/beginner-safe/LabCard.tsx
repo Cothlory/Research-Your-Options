@@ -21,6 +21,7 @@ const UVA_BLUE = "#232D4B";
 const UVA_ORANGE = "#E57200";
 const UVA_WHITE = "#FFFFFF";
 const UVA_LIGHT_BLUE = "#6DA9D2";
+const UVA_WARM_LIGHT = "#FFD9AD";
 
 const summaryClampStyle: CSSProperties = {
   display: "-webkit-box",
@@ -82,7 +83,7 @@ export function LabCard({ lab }: { lab: LabCardModel }) {
               className="mb-1 h-8 w-8 shrink-0"
             />
           </div>
-          <ul className="mt-3 space-y-1 text-lg leading-tight" style={{ color: UVA_ORANGE }}>
+          <ul className="mt-3 space-y-1 text-lg font-semibold leading-tight" style={{ color: UVA_WARM_LIGHT }}>
             {requirements.map((item, index) => (
               <li
                 key={`${lab.id}-req-${index}`}
