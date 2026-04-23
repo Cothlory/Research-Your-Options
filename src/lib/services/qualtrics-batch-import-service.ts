@@ -6,6 +6,7 @@ import { env, flags } from "@/lib/config/env";
 import { logger } from "@/lib/logger";
 import { ingestSurveySubmission } from "@/lib/services/ingestion-service";
 import { syncFacultyRowsToGoogleSheet } from "@/lib/publication/google-sheets";
+import { getSurveyAutomationSettings } from "@/lib/services/survey-settings-service";
 
 interface QualtricsExportInitResponse {
   result?: {
@@ -360,8 +361,9 @@ function extractWaveId(record: Record<string, unknown>, values: Record<string, u
 export async function importQualtricsResponsesBatch(
   options?: BatchImportOptions,
 ): Promise<BatchImportResult> {
+  const settings = await getSurveyAutomationSettings();
   const endDate = options?.endDate ?? new Date();
-  const startDate = options?.startDate ?? subDays(endDate, flags.campaignGraceDays);
+  const startDate = options?.startDate ?? subDays(endDate, settings.graceDays);
 
   if (!flags.hasQualtricsApiConfig) {
     return {

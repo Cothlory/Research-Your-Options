@@ -106,8 +106,10 @@ pnpm test:e2e
 ## Deployment Notes (Render)
 
 - Set all env vars from [.env.example](.env.example).
-- Build command: `pnpm install && pnpm prisma:generate && pnpm build`
-- Start command: `pnpm start`
+- Build command: `bash run_prod.sh build`
+- Start command: `bash run_prod.sh start`
+- If your deployment platform supports a single command, `bash run_prod.sh all` will prepare Prisma, build, and start.
+- `run_dev.sh` performs local Prisma generation + database sync before starting the dev server.
 - Optional cron route triggers:
 	- `POST /api/jobs/semester-campaign`
 	- `POST /api/jobs/reminder-email`

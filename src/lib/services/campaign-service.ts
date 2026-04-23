@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db/client";
 import { semesterLabelFromDate } from "@/lib/domain/snapshot";
 import { sendBulkEmail, type EmailMessage } from "@/lib/email/smtp";
 import { logger } from "@/lib/logger";
+import { getSurveyAutomationSettings } from "@/lib/services/survey-settings-service";
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -276,6 +277,7 @@ export async function sendManualSurveyInvitations(inputEmails?: string[]): Promi
   const now = new Date();
   const suffix = now.toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
   const waveId = `manual-${suffix}`;
+  const settings = await getSurveyAutomationSettings();
 
   const campaign = await prisma.surveyCampaign.create({
     data: {
@@ -283,7 +285,7 @@ export async function sendManualSurveyInvitations(inputEmails?: string[]): Promi
       semesterLabel: semesterLabelFromDate(now),
       scheduledFor: now,
       surveyLink: env.QUALTRICS_SURVEY_LINK,
-      graceDays: flags.campaignGraceDays,
+      graceDays: settings.graceDays,
       status: CampaignStatus.launched,
       launchedAt: now,
     },
@@ -339,9 +341,11 @@ async function ensureCampaignsForYear(year: number): Promise<number> {
     return 0;
   }
 
+  const settings = await getSurveyAutomationSettings();
+
   let created = 0;
 
-  for (const monthDay of flags.campaignDates) {
+  for (const monthDay of settings.campaignDates) {
     const date = parseMonthDay(monthDay, year);
     if (!date) {
       logger.warn("Invalid SURVEY_CAMPAIGN_DATES entry", { monthDay, year });
@@ -357,11 +361,11 @@ async function ensureCampaignsForYear(year: number): Promise<number> {
         semesterLabel: semesterLabelFromDate(date),
         scheduledFor: date,
         surveyLink: env.QUALTRICS_SURVEY_LINK,
-        graceDays: flags.campaignGraceDays,
+        graceDays: settings.graceDays,
       },
       update: {
         surveyLink: env.QUALTRICS_SURVEY_LINK,
-        graceDays: flags.campaignGraceDays,
+        graceDays: settings.graceDays,
       },
     });
 
@@ -559,7 +563,8 @@ interface ReminderRunResult {
 }
 
 export async function sendReminderEmails(now: Date = new Date()): Promise<ReminderRunResult> {
-  const threshold = subDays(now, flags.campaignGraceDays);
+  const settings = await getSurveyAutomationSettings();
+  const threshold = subDays(now, settings.graceDays);
 
   const invitations = await prisma.surveyInvitation.findMany({
     where: {

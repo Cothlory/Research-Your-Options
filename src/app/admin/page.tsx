@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 type SnapshotItem = {
@@ -71,6 +71,11 @@ type ManualCollectResponse = {
   failed: number;
 };
 
+type SurveyAutomationSettings = {
+  campaignDates: string[];
+  graceDays: number;
+};
+
 async function getAdminSession(): Promise<SessionResponse> {
   const res = await fetch("/api/admin/auth/session", { cache: "no-store" });
   if (!res.ok) {
@@ -114,6 +119,41 @@ async function getStudents(): Promise<StudentItem[]> {
 
   const payload = (await res.json()) as { ok: boolean; students: StudentItem[] };
   return payload.students;
+}
+
+async function getSurveySettings(): Promise<SurveyAutomationSettings> {
+  const res = await fetch("/api/admin/survey/settings", { cache: "no-store" });
+  if (res.status === 401) {
+    throw new Error("Unauthorized");
+  }
+  if (!res.ok) {
+    throw new Error("Failed to load survey automation settings.");
+  }
+
+  const payload = (await res.json()) as { ok: boolean; settings: SurveyAutomationSettings };
+  return payload.settings;
+}
+
+async function saveSurveySettings(settings: SurveyAutomationSettings): Promise<SurveyAutomationSettings> {
+  const res = await fetch("/api/admin/survey/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+
+  if (res.status === 401) {
+    throw new Error("Unauthorized");
+  }
+
+  const payload = (await res.json().catch(() => null)) as
+    | { ok?: boolean; settings?: SurveyAutomationSettings; error?: unknown }
+    | null;
+
+  if (!res.ok || !payload?.ok || !payload.settings) {
+    throw new Error("Failed to save survey automation settings.");
+  }
+
+  return payload.settings;
 }
 
 async function loginAdmin(email: string, password: string): Promise<void> {
@@ -288,6 +328,141 @@ function formatDate(value?: string | null): string {
   return date.toISOString().slice(0, 10);
 }
 
+type FloatingNoticeProps = {
+  kind: "error" | "success";
+  message: string;
+  onDismiss: () => void;
+};
+
+function FloatingNotice({ kind, message, onDismiss }: FloatingNoticeProps) {
+  const [isClosing, setIsClosing] = useState(false);
+  const timerRef = useRef<number | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  const dismissRef = useRef(onDismiss);
+
+  useEffect(() => {
+    dismissRef.current = onDismiss;
+  }, [onDismiss]);
+
+  useEffect(() => {
+    const startTimer = () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+      }
+
+      timerRef.current = window.setTimeout(() => {
+        setIsClosing(true);
+        closeTimerRef.current = window.setTimeout(() => {
+          dismissRef.current();
+        }, 220);
+      }, 8000);
+    };
+
+    setIsClosing(false);
+    startTimer();
+
+    return () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+      }
+
+      if (closeTimerRef.current !== null) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+    };
+  }, [message]);
+
+  const handleMouseEnter = () => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+
+    setIsClosing(false);
+  };
+
+  const handleMouseLeave = () => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+    }
+
+    timerRef.current = window.setTimeout(() => {
+      setIsClosing(true);
+      closeTimerRef.current = window.setTimeout(() => {
+        dismissRef.current();
+      }, 220);
+    }, 8000);
+  };
+
+  const toneClasses =
+    kind === "error"
+      ? "border-rose-200 bg-rose-50 text-rose-950 shadow-rose-950/10"
+      : "border-emerald-200 bg-emerald-50 text-emerald-950 shadow-emerald-950/10";
+
+  return (
+    <aside
+      role="alert"
+      aria-live={kind === "error" ? "assertive" : "polite"}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className={`pointer-events-auto w-[min(24rem,calc(100vw-2rem))] rounded-2xl border px-4 py-3 shadow-2xl transition-all duration-300 ease-out ${toneClasses} ${
+        isClosing ? "translate-y-2 opacity-0" : "translate-y-0 opacity-100"
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/70 text-sm font-black uppercase tracking-[0.08em] text-slate-700">
+          {kind === "error" ? "!" : "i"}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold leading-6">{message}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="rounded-md border border-black/10 bg-white/70 px-2 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-700 transition hover:bg-white"
+          aria-label="Dismiss notification"
+        >
+          Close
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+type FloatingNoticeStackProps = {
+  actionError: string | null;
+  actionNotice: string | null;
+  onClearError: () => void;
+  onClearNotice: () => void;
+};
+
+function FloatingNoticeStack({
+  actionError,
+  actionNotice,
+  onClearError,
+  onClearNotice,
+}: FloatingNoticeStackProps) {
+  if (!actionError && !actionNotice) {
+    return null;
+  }
+
+  return (
+    <div className="pointer-events-none fixed right-4 top-4 z-50 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-3">
+      {actionError ? (
+        <FloatingNotice kind="error" message={actionError} onDismiss={onClearError} />
+      ) : null}
+      {actionNotice ? (
+        <FloatingNotice kind="success" message={actionNotice} onDismiss={onClearNotice} />
+      ) : null}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const [authChecked, setAuthChecked] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -303,6 +478,8 @@ export default function AdminPage() {
   const [manualIssueId, setManualIssueId] = useState("");
   const [newProfessorEmail, setNewProfessorEmail] = useState("");
   const [newStudentEmail, setNewStudentEmail] = useState("");
+  const [campaignDatesInput, setCampaignDatesInput] = useState("");
+  const [graceDaysInput, setGraceDaysInput] = useState("7");
   const [selectedProfessorEmails, setSelectedProfessorEmails] = useState<Record<string, boolean>>(
     {},
   );
@@ -342,6 +519,21 @@ export default function AdminPage() {
     enabled: isAuthenticated,
   });
 
+  const surveySettingsQuery = useQuery({
+    queryKey: ["admin-survey-settings"],
+    queryFn: getSurveySettings,
+    enabled: isAuthenticated,
+  });
+
+  useEffect(() => {
+    if (!surveySettingsQuery.data) {
+      return;
+    }
+
+    setCampaignDatesInput(surveySettingsQuery.data.campaignDates.join(", "));
+    setGraceDaysInput(String(surveySettingsQuery.data.graceDays));
+  }, [surveySettingsQuery.data]);
+
   const isBusy = useMemo(() => Boolean(actionBusyId), [actionBusyId]);
 
   const selectedEmails = useMemo(() => {
@@ -353,6 +545,7 @@ export default function AdminPage() {
       submissionsQuery.refetch(),
       professorsQuery.refetch(),
       studentsQuery.refetch(),
+      surveySettingsQuery.refetch(),
     ]);
   };
 
@@ -457,140 +650,167 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {submissionsQuery.isLoading || professorsQuery.isLoading || studentsQuery.isLoading ? (
+      {submissionsQuery.isLoading || professorsQuery.isLoading || studentsQuery.isLoading || surveySettingsQuery.isLoading ? (
         <p className="text-sm text-slate-700">Loading admin data...</p>
       ) : null}
 
-      {submissionsQuery.isError || professorsQuery.isError || studentsQuery.isError ? (
+      {submissionsQuery.isError || professorsQuery.isError || studentsQuery.isError || surveySettingsQuery.isError ? (
         <p className="text-sm text-rose-700">Failed to load part of the admin data.</p>
       ) : null}
 
-      {actionError ? <p className="text-sm text-rose-700">{actionError}</p> : null}
-      {actionNotice ? <p className="text-sm text-emerald-700">{actionNotice}</p> : null}
+      <FloatingNoticeStack
+        actionError={actionError}
+        actionNotice={actionNotice}
+        onClearError={() => setActionError(null)}
+        onClearNotice={() => setActionNotice(null)}
+      />
 
       <article className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-xl font-bold text-slate-900">Manual survey operations</h2>
+        <h2 className="text-xl font-bold text-slate-900">Survey automation settings</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Manual send does not trigger expiration timer. Manual collect imports past 7-day responses.
+          Configure annual automatic survey dates and response grace period. These settings are
+          saved in the database.
         </p>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            onClick={async () => {
-              setActionError(null);
-              setActionBusyId("manual-send");
-              try {
-                await sendManualSurvey(selectedEmails);
-                await refreshAll();
-              } catch (error) {
-                setActionError(
-                  error instanceof Error ? error.message : "Manual survey send failed.",
-                );
-              } finally {
-                setActionBusyId(null);
-              }
-            }}
-            disabled={isBusy || selectedEmails.length === 0}
-            className="rounded-lg bg-sky-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            Send survey to selected professors ({selectedEmails.length})
-          </button>
+        <div className="mt-4 grid gap-3 md:grid-cols-[1fr_220px_auto] md:items-end">
+          <label className="block text-sm font-semibold text-slate-800">
+            Annual send dates (MM-DD, comma separated)
+            <input
+              type="text"
+              value={campaignDatesInput}
+              onChange={(event) => setCampaignDatesInput(event.target.value)}
+              placeholder="02-01, 04-01, 09-01, 11-01"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </label>
+
+          <label className="block text-sm font-semibold text-slate-800">
+            Survey grace period (days)
+            <input
+              type="number"
+              min={1}
+              max={60}
+              value={graceDaysInput}
+              onChange={(event) => setGraceDaysInput(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </label>
 
           <button
             onClick={async () => {
               setActionError(null);
               setActionNotice(null);
-              setActionBusyId("manual-collect");
+              setActionBusyId("save-survey-settings");
+
               try {
-                const result = await collectManualSurvey();
+                const campaignDates = campaignDatesInput
+                  .split(",")
+                  .map((value) => value.trim())
+                  .filter(Boolean);
 
-                if (result.skipped) {
-                  setActionNotice(`Collect skipped: ${result.reason ?? "No work performed."}`);
-                } else if (result.partial) {
-                  const reasonDetails =
-                    result.failedReasons && result.failedReasons.length > 0
-                      ? ` Failed reasons: ${result.failedReasons.join(" | ")}`
-                      : "";
+                const graceDays = Number.parseInt(graceDaysInput, 10);
+                const saved = await saveSurveySettings({
+                  campaignDates,
+                  graceDays,
+                });
 
-                  setActionNotice(
-                    `Collect finished with warnings. Imported ${result.imported}, duplicates ${result.duplicates}, filtered ${result.filteredOut}, failed ${result.failed}.${reasonDetails}`,
-                  );
-                } else {
-                  setActionNotice(
-                    `Collect complete. Imported ${result.imported}, duplicates ${result.duplicates}, filtered ${result.filteredOut}, failed ${result.failed}.`,
-                  );
-                }
-
-                await refreshAll();
-              } catch (error) {
-                setActionError(
-                  error instanceof Error ? error.message : "Manual collect failed.",
+                setCampaignDatesInput(saved.campaignDates.join(", "));
+                setGraceDaysInput(String(saved.graceDays));
+                setActionNotice(
+                  `Survey automation settings saved. Dates: ${saved.campaignDates.join(", ")}. Grace period: ${saved.graceDays} day(s).`,
                 );
-              } finally {
-                setActionBusyId(null);
-              }
-            }}
-            disabled={isBusy}
-            className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            Collect past 7-day survey responses
-          </button>
-        </div>
-      </article>
 
-      <article className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-xl font-bold text-slate-900">Publication email operations</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Send the latest publication issue (or a specific issue ID) to all active student
-          subscribers.
-        </p>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          <input
-            type="text"
-            value={manualIssueId}
-            onChange={(event) => setManualIssueId(event.target.value)}
-            placeholder="Issue ID (optional: latest issue)"
-            className="w-96 rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          />
-
-          <button
-            onClick={async () => {
-              setActionError(null);
-              setActionNotice(null);
-              setActionBusyId("manual-publication-email");
-
-              try {
-                const result = await sendManualPublicationEmail(manualIssueId.trim() || undefined);
-                const sentCount = result.subscriberFallbackCount ?? 0;
-
-                if (result.skipped) {
-                  setActionNotice(result.reason ?? "Manual issue email send skipped.");
-                } else {
-                  setActionNotice(
-                    `Sent issue ${result.issueId} to ${sentCount} active subscriber${sentCount === 1 ? "" : "s"}.`,
-                  );
-                }
+                await surveySettingsQuery.refetch();
               } catch (error) {
                 setActionError(
                   error instanceof Error
                     ? error.message
-                    : "Failed to send issue email to subscribers.",
+                    : "Failed to save survey automation settings.",
                 );
               } finally {
                 setActionBusyId(null);
               }
             }}
             disabled={isBusy}
-            className="rounded-lg bg-indigo-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
-            Manual send issue email
+            Save settings
           </button>
         </div>
       </article>
 
       <article className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-xl font-bold text-slate-900">Professor email list</h2>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <h2 className="text-xl font-bold text-slate-900">Professor email list</h2>
+
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-amber-800">
+              Manual survey operations
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                onClick={async () => {
+                  setActionError(null);
+                  setActionBusyId("manual-send");
+                  try {
+                    await sendManualSurvey(selectedEmails);
+                    await refreshAll();
+                  } catch (error) {
+                    setActionError(
+                      error instanceof Error ? error.message : "Manual survey send failed.",
+                    );
+                  } finally {
+                    setActionBusyId(null);
+                  }
+                }}
+                disabled={isBusy || selectedEmails.length === 0}
+                className="rounded-lg bg-sky-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+              >
+                Send to selected ({selectedEmails.length})
+              </button>
+
+              <button
+                onClick={async () => {
+                  setActionError(null);
+                  setActionNotice(null);
+                  setActionBusyId("manual-collect");
+                  try {
+                    const result = await collectManualSurvey();
+
+                    if (result.skipped) {
+                      setActionNotice(`Collect skipped: ${result.reason ?? "No work performed."}`);
+                    } else if (result.partial) {
+                      const reasonDetails =
+                        result.failedReasons && result.failedReasons.length > 0
+                          ? ` Failed reasons: ${result.failedReasons.join(" | ")}`
+                          : "";
+
+                      setActionNotice(
+                        `Collect finished with warnings. Imported ${result.imported}, duplicates ${result.duplicates}, filtered ${result.filteredOut}, failed ${result.failed}.${reasonDetails}`,
+                      );
+                    } else {
+                      setActionNotice(
+                        `Collect complete. Imported ${result.imported}, duplicates ${result.duplicates}, filtered ${result.filteredOut}, failed ${result.failed}.`,
+                      );
+                    }
+
+                    await refreshAll();
+                  } catch (error) {
+                    setActionError(
+                      error instanceof Error ? error.message : "Manual collect failed.",
+                    );
+                  } finally {
+                    setActionBusyId(null);
+                  }
+                }}
+                disabled={isBusy}
+                className="rounded-lg bg-amber-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+              >
+                Collect responses
+              </button>
+            </div>
+          </div>
+        </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
           <input
@@ -692,7 +912,57 @@ export default function AdminPage() {
       </article>
 
       <article className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-xl font-bold text-slate-900">Student email list</h2>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <h2 className="text-xl font-bold text-slate-900">Student email list</h2>
+
+          <div className="rounded-xl border border-indigo-300 bg-indigo-50 p-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-indigo-800">
+              Manual publication operation
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <input
+                type="text"
+                value={manualIssueId}
+                onChange={(event) => setManualIssueId(event.target.value)}
+                placeholder="Issue ID (optional)"
+                className="w-64 rounded-lg border border-slate-300 px-3 py-2 text-xs"
+              />
+
+              <button
+                onClick={async () => {
+                  setActionError(null);
+                  setActionNotice(null);
+                  setActionBusyId("manual-publication-email");
+
+                  try {
+                    const result = await sendManualPublicationEmail(manualIssueId.trim() || undefined);
+                    const sentCount = result.subscriberFallbackCount ?? 0;
+
+                    if (result.skipped) {
+                      setActionNotice(result.reason ?? "Manual issue email send skipped.");
+                    } else {
+                      setActionNotice(
+                        `Sent issue ${result.issueId} to ${sentCount} active subscriber${sentCount === 1 ? "" : "s"}.`,
+                      );
+                    }
+                  } catch (error) {
+                    setActionError(
+                      error instanceof Error
+                        ? error.message
+                        : "Failed to send issue email to subscribers.",
+                    );
+                  } finally {
+                    setActionBusyId(null);
+                  }
+                }}
+                disabled={isBusy}
+                className="rounded-lg bg-indigo-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+              >
+                Send issue email
+              </button>
+            </div>
+          </div>
+        </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
           <input
