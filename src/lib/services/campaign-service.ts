@@ -164,11 +164,6 @@ export async function listProfessorContactsWithStatus(
       status: {
         in: [CampaignStatus.launched, CampaignStatus.closed],
       },
-      label: {
-        not: {
-          startsWith: "manual-",
-        },
-      },
     },
     orderBy: [{ launchedAt: "desc" }, { scheduledFor: "desc" }],
   });
